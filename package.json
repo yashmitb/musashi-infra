@@ -1,0 +1,35 @@
+{
+  "name": "@musashi/infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kalshi-first data foundation for Musashi.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test",
+    "job:full-sync": "tsx scripts/run-full-sync.ts",
+    "job:crawl-advance": "tsx scripts/run-crawl-advance.ts",
+    "job:resolution-check": "tsx scripts/run-resolution-check.ts",
+    "job:gap-detection": "tsx scripts/run-gap-detection.ts",
+    "check:supabase": "tsx --env-file=.env scripts/check-supabase.ts",
+    "db:apply": "tsx --env-file=.env scripts/apply-migration.ts",
+    "status:sync": "tsx scripts/show-sync-status.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "postgres": "^3.4.9",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}

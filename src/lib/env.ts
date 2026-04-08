@@ -22,6 +22,8 @@ export interface MusashiEnv {
   gapDetectionProgressEveryMarkets: number;
   crawlAdvanceMaxRuns: number;
   crawlAdvanceMaxDurationMs: number;
+  collectionStallMaxMinutes: number;
+  collectionRunMaxAgeMinutes: number;
 }
 
 export function getEnv(): MusashiEnv {
@@ -39,6 +41,8 @@ export function getEnv(): MusashiEnv {
     gapDetectionProgressEveryMarkets: Number(process.env.GAP_DETECTION_PROGRESS_EVERY_MARKETS ?? '25'),
     crawlAdvanceMaxRuns: Number(process.env.CRAWL_ADVANCE_MAX_RUNS ?? '5'),
     crawlAdvanceMaxDurationMs: Number(process.env.CRAWL_ADVANCE_MAX_DURATION_MS ?? '900000'),
+    collectionStallMaxMinutes: Number(process.env.COLLECTION_STALL_MAX_MINUTES ?? '180'),
+    collectionRunMaxAgeMinutes: Number(process.env.COLLECTION_RUN_MAX_AGE_MINUTES ?? '30'),
   };
 }
 

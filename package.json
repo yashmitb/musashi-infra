@@ -19,7 +19,10 @@
     "job:gap-detection": "tsx scripts/run-gap-detection.ts",
     "check:supabase": "tsx --env-file=.env scripts/check-supabase.ts",
     "db:apply": "tsx --env-file=.env scripts/apply-migration.ts",
-    "status:sync": "tsx scripts/show-sync-status.ts"
+    "status:sync": "tsx scripts/show-sync-status.ts",
+    "status:crawl": "tsx scripts/show-crawl-progress.ts",
+    "status:collection": "tsx scripts/show-collection-summary.ts",
+    "check:collection": "tsx scripts/check-collection-health.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",

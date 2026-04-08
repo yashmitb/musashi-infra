@@ -53,3 +53,9 @@ test/                 unit and contract tests
 The full sync is designed to advance the exchange crawl in bounded runs. It resumes from `sync_checkpoints` until the crawl completes.
 
 Use `npm run job:crawl-advance` when you want a single command to chain multiple bounded full-sync runs together without manually relaunching each one.
+
+Use `npm run status:collection` for a short operational summary of checkpoint progress, Kalshi source health, and the most recent full-sync runs.
+
+Use `npm run status:crawl` when you want a throughput-oriented view of the crawl, including recent markets-per-minute and snapshots-per-minute across bounded full-sync runs.
+
+Use `npm run check:collection` when you want the process to fail if collection is stalled, unhealthy, or showing non-budget full-sync errors.

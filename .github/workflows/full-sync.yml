@@ -1,4 +1,4 @@
-name: Full Sync
+name: Crawl Advance
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: full-sync
+  group: crawl-advance
   cancel-in-progress: false
 
 jobs:
@@ -23,10 +23,12 @@ jobs:
           cache: 'npm'
 
       - run: npm ci
-      - run: npm run job:full-sync
+      - run: npm run job:crawl-advance
         env:
           KALSHI_BASE_URL: ${{ secrets.KALSHI_BASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          FULL_SYNC_PAGE_BUDGET: '10'
+          FULL_SYNC_PAGE_BUDGET: '5'
           FULL_SYNC_ABSOLUTE_MAX_PAGES: '1000'
+          CRAWL_ADVANCE_MAX_RUNS: '3'
+          CRAWL_ADVANCE_MAX_DURATION_MS: '480000'

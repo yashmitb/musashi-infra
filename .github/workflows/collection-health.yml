@@ -1,0 +1,35 @@
+name: Collection Health
+
+on:
+  schedule:
+    - cron: '30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: collection-health
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run status:collection
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      - run: npm run check:collection
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          COLLECTION_STALL_MAX_MINUTES: '180'
+          COLLECTION_RUN_MAX_AGE_MINUTES: '30'

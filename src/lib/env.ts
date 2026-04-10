@@ -18,6 +18,8 @@ export interface MusashiEnv {
   fullSyncProgressEveryPages: number;
   resolutionCheckMaxMarkets: number;
   resolutionCheckProgressEveryMarkets: number;
+  resolutionCheckFetchConcurrency: number;
+  resolutionCheckWorkerRateLimitMs: number;
   gapDetectionMaxMarkets: number;
   gapDetectionProgressEveryMarkets: number;
   crawlAdvanceMaxRuns: number;
@@ -41,6 +43,8 @@ export function getEnv(): MusashiEnv {
     fullSyncProgressEveryPages: Number(process.env.FULL_SYNC_PROGRESS_EVERY_PAGES ?? '1'),
     resolutionCheckMaxMarkets: Number(process.env.RESOLUTION_CHECK_MAX_MARKETS ?? '200'),
     resolutionCheckProgressEveryMarkets: Number(process.env.RESOLUTION_CHECK_PROGRESS_EVERY_MARKETS ?? '25'),
+    resolutionCheckFetchConcurrency: Number(process.env.RESOLUTION_CHECK_FETCH_CONCURRENCY ?? '2'),
+    resolutionCheckWorkerRateLimitMs: Number(process.env.RESOLUTION_CHECK_WORKER_RATE_LIMIT_MS ?? '250'),
     gapDetectionMaxMarkets: Number(process.env.GAP_DETECTION_MAX_MARKETS ?? '500'),
     gapDetectionProgressEveryMarkets: Number(process.env.GAP_DETECTION_PROGRESS_EVERY_MARKETS ?? '25'),
     crawlAdvanceMaxRuns: Number(process.env.CRAWL_ADVANCE_MAX_RUNS ?? '5'),

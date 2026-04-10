@@ -5,6 +5,7 @@ import { failOpenRuns, startRun, completeRun, updateRunProgress } from '../db/in
 import { listResolutionCandidates, updateMarketLifecycle } from '../db/markets.js';
 import { applyResolvedMarketState, insertResolutions } from '../db/resolutions.js';
 import { updateSourceHealth } from '../db/source-health.js';
+import { mapWithConcurrency } from '../lib/collections.js';
 import { getEnv } from '../lib/env.js';
 import type { MarketResolution } from '../types/storage.js';
 import type { IngestionRunRecord } from '../types/storage.js';
@@ -47,71 +48,121 @@ export async function runResolutionCheck(): Promise<IngestionRunRecord> {
     notes: null,
   };
 
-  const client = new KalshiClient({ baseUrl: env.kalshiBaseUrl });
-
   try {
     const candidates = await listResolutionCandidates(startedAt, env.resolutionCheckMaxMarkets);
-    const pendingResolutions: MarketResolution[] = [];
-
+    const kalshiCandidates = candidates.filter((candidate) => candidate.platform === 'kalshi');
+    const startedAtIso = startedAt.toISOString();
     let processed = 0;
 
-    for (const candidate of candidates) {
-      if (candidate.platform !== 'kalshi') {
-        continue;
-      }
+    const processedCandidates = await mapWithConcurrency(
+      kalshiCandidates,
+      env.resolutionCheckFetchConcurrency,
+      async (candidate, index) => {
+        const client = new KalshiClient({
+          baseUrl: env.kalshiBaseUrl,
+          rateLimitMs: env.resolutionCheckWorkerRateLimitMs,
+        });
 
-      try {
-        processed += 1;
-        result.kalshi_markets_fetched += 1;
-        const raw = await client.fetchMarket(candidate.platform_id);
+        try {
+          const raw = await client.fetchMarket(candidate.platform_id);
 
-        if (!raw) {
-          continue;
-        }
+          if (!raw) {
+            return {
+              candidate,
+              resolution: null,
+              lifecycleUpdate: null,
+              error: null,
+            };
+          }
 
-        const lifecycleStatus = mapResolutionLifecycleStatus(raw.status);
+          const lifecycleStatus = mapResolutionLifecycleStatus(raw.status);
 
-        if (lifecycleStatus === 'resolved' && raw.result) {
-          pendingResolutions.push({
-            market_id: candidate.id,
-            outcome: raw.result === 'yes' ? 'YES' : 'NO',
-            resolved_at: raw.latest_expiration_time ?? raw.close_time ?? startedAt.toISOString(),
-            final_yes_price: raw.last_price_dollars ? Number(raw.last_price_dollars) : null,
-            resolution_source: 'kalshi_api_v2',
-            detected_at: startedAt.toISOString(),
-          });
-        } else {
-          await updateMarketLifecycle(candidate.id, {
-            status: lifecycleStatus,
-            resolved: false,
+          const resolution: MarketResolution | null =
+            lifecycleStatus === 'resolved' && raw.result
+              ? {
+                  market_id: candidate.id,
+                  outcome: raw.result === 'yes' ? 'YES' : 'NO',
+                  resolved_at: raw.latest_expiration_time ?? raw.close_time ?? startedAtIso,
+                  final_yes_price: raw.last_price_dollars ? Number(raw.last_price_dollars) : null,
+                  resolution_source: 'kalshi_api_v2',
+                  detected_at: startedAtIso,
+                }
+              : null;
+
+          const lifecycleUpdate =
+            resolution === null
+              ? {
+                  marketId: candidate.id,
+                  status: lifecycleStatus,
+                  resolved: false,
+                  resolution: null,
+                  resolved_at: null,
+                  last_ingested_at: startedAtIso,
+                }
+              : null;
+
+          processed += 1;
+
+          if (processed % env.resolutionCheckProgressEveryMarkets === 0) {
+            result.notes = `Resolution check in progress: processed ${processed}/${kalshiCandidates.length}, detected ${result.resolutions_detected}, errors ${result.kalshi_errors}.`;
+            await updateRunProgress(jobId, {
+              kalshi_markets_fetched: processed,
+              resolutions_detected: result.resolutions_detected,
+              kalshi_errors: result.kalshi_errors,
+              errors: result.errors,
+              status: 'running',
+              notes: result.notes,
+            });
+          }
+
+          return {
+            candidate,
+            resolution,
+            lifecycleUpdate,
+            error: null,
+          };
+        } catch (error) {
+          processed += 1;
+          result.kalshi_errors += 1;
+          const runError = {
+            source: 'kalshi' as const,
+            error_type: 'resolution_candidate_failed',
+            error_message: error instanceof Error ? error.message : String(error),
+            market_id: candidate.platform_id,
+          };
+          result.errors.push(runError);
+
+          if (processed % env.resolutionCheckProgressEveryMarkets === 0) {
+            result.notes = `Resolution check in progress: processed ${processed}/${kalshiCandidates.length}, detected ${result.resolutions_detected}, errors ${result.kalshi_errors}.`;
+            await updateRunProgress(jobId, {
+              kalshi_markets_fetched: processed,
+              resolutions_detected: result.resolutions_detected,
+              kalshi_errors: result.kalshi_errors,
+              errors: result.errors,
+              status: 'running',
+              notes: result.notes,
+            });
+          }
+
+          return {
+            candidate,
             resolution: null,
-            resolved_at: null,
-            last_ingested_at: startedAt.toISOString(),
-          });
+            lifecycleUpdate: null,
+            error: runError,
+          };
         }
-      } catch (error) {
-        result.kalshi_errors += 1;
-        result.errors.push({
-          source: 'kalshi',
-          error_type: 'resolution_candidate_failed',
-          error_message: error instanceof Error ? error.message : String(error),
-          market_id: candidate.platform_id,
-        });
-      }
+      },
+    );
 
-      if (processed % env.resolutionCheckProgressEveryMarkets === 0) {
-        result.notes = `Resolution check in progress: processed ${processed}/${candidates.length}, detected ${result.resolutions_detected}, errors ${result.kalshi_errors}.`;
-        await updateRunProgress(jobId, {
-          kalshi_markets_fetched: result.kalshi_markets_fetched,
-          resolutions_detected: result.resolutions_detected,
-          kalshi_errors: result.kalshi_errors,
-          errors: result.errors,
-          status: 'running',
-          notes: result.notes,
-        });
-      }
+    result.kalshi_markets_fetched = kalshiCandidates.length;
+    const pendingResolutions = processedCandidates.flatMap((item) => (item.resolution ? [item.resolution] : []));
+    const lifecycleUpdates = processedCandidates.flatMap((item) =>
+      item.lifecycleUpdate ? [item.lifecycleUpdate] : [],
+    );
+
+    for (const lifecycleUpdate of lifecycleUpdates) {
+      await updateMarketLifecycle(lifecycleUpdate.marketId, lifecycleUpdate);
     }
-
     const insertedCount = await insertResolutions(pendingResolutions);
     await applyResolvedMarketState(pendingResolutions);
     result.resolutions_detected = insertedCount;

@@ -25,6 +25,8 @@
     "status:crawl": "tsx scripts/show-crawl-progress.ts",
     "status:collection": "tsx scripts/show-collection-summary.ts",
     "status:storage": "tsx scripts/show-storage-summary.ts",
+    "status:resolution": "tsx scripts/show-resolution-summary.ts",
+    "status:gap": "tsx scripts/show-gap-summary.ts",
     "check:collection": "tsx scripts/check-collection-health.ts"
   },
   "dependencies": {

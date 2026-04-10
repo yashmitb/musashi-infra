@@ -65,22 +65,34 @@ export async function runGapDetection(): Promise<IngestionRunRecord> {
         continue;
       }
 
-      const raw = await client.fetchMarket(candidate.platform_id);
-      processed += 1;
-      result.kalshi_markets_fetched += 1;
+      try {
+        const raw = await client.fetchMarket(candidate.platform_id);
+        processed += 1;
+        result.kalshi_markets_fetched += 1;
 
-      if (!raw) {
-        continue;
+        if (!raw) {
+          continue;
+        }
+
+        marketsToBackfill.push(normalizeKalshiMarket(raw, startedAt).market);
+      } catch (error) {
+        processed += 1;
+        result.kalshi_errors += 1;
+        result.errors.push({
+          source: 'kalshi',
+          error_type: 'gap_candidate_failed',
+          error_message: error instanceof Error ? error.message : String(error),
+          market_id: candidate.platform_id,
+        });
       }
 
-      marketsToBackfill.push(normalizeKalshiMarket(raw, startedAt).market);
-
       if (processed % env.gapDetectionProgressEveryMarkets === 0) {
-        result.notes = `Gap detection in progress: processed ${processed}/${candidates.length}, prepared ${marketsToBackfill.length} backfills.`;
+        result.notes = `Gap detection in progress: processed ${processed}/${candidates.length}, prepared ${marketsToBackfill.length} backfills, errors ${result.kalshi_errors}.`;
         await updateRunProgress(jobId, {
           kalshi_markets_fetched: result.kalshi_markets_fetched,
           kalshi_snapshots_written: result.kalshi_snapshots_written,
           kalshi_errors: result.kalshi_errors,
+          errors: result.errors,
           status: 'running',
           notes: result.notes,
         });
@@ -92,8 +104,8 @@ export async function runGapDetection(): Promise<IngestionRunRecord> {
     });
 
     result.kalshi_snapshots_written = snapshotResult.kalshi_written;
-    result.status = 'success';
-    result.notes = `Detected ${candidates.length} gap candidates and backfilled ${snapshotResult.total_written} snapshots.`;
+    result.status = result.kalshi_errors > 0 ? 'partial' : 'success';
+    result.notes = `Detected ${candidates.length} gap candidates and backfilled ${snapshotResult.total_written} snapshots with ${result.kalshi_errors} errors.`;
     await updateSourceHealth({
       source: 'kalshi',
       is_available: true,

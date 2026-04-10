@@ -58,41 +58,52 @@ export async function runResolutionCheck(): Promise<IngestionRunRecord> {
         continue;
       }
 
-      processed += 1;
-      result.kalshi_markets_fetched += 1;
-      const raw = await client.fetchMarket(candidate.platform_id);
+      try {
+        processed += 1;
+        result.kalshi_markets_fetched += 1;
+        const raw = await client.fetchMarket(candidate.platform_id);
 
-      if (!raw || raw.status !== 'settled' || !raw.result) {
-        continue;
-      }
+        if (!raw || raw.status !== 'settled' || !raw.result) {
+          continue;
+        }
 
-      const inserted = await insertResolution({
-        market_id: candidate.id,
-        outcome: raw.result === 'yes' ? 'YES' : 'NO',
-        resolved_at: raw.latest_expiration_time ?? raw.close_time ?? startedAt.toISOString(),
-        final_yes_price: raw.last_price_dollars ? Number(raw.last_price_dollars) : null,
-        resolution_source: 'kalshi_api_v2',
-        detected_at: startedAt.toISOString(),
-      });
+        const inserted = await insertResolution({
+          market_id: candidate.id,
+          outcome: raw.result === 'yes' ? 'YES' : 'NO',
+          resolved_at: raw.latest_expiration_time ?? raw.close_time ?? startedAt.toISOString(),
+          final_yes_price: raw.last_price_dollars ? Number(raw.last_price_dollars) : null,
+          resolution_source: 'kalshi_api_v2',
+          detected_at: startedAt.toISOString(),
+        });
 
-      if (inserted) {
-        result.resolutions_detected += 1;
+        if (inserted) {
+          result.resolutions_detected += 1;
+        }
+      } catch (error) {
+        result.kalshi_errors += 1;
+        result.errors.push({
+          source: 'kalshi',
+          error_type: 'resolution_candidate_failed',
+          error_message: error instanceof Error ? error.message : String(error),
+          market_id: candidate.platform_id,
+        });
       }
 
       if (processed % env.resolutionCheckProgressEveryMarkets === 0) {
-        result.notes = `Resolution check in progress: processed ${processed}/${candidates.length}, detected ${result.resolutions_detected}.`;
+        result.notes = `Resolution check in progress: processed ${processed}/${candidates.length}, detected ${result.resolutions_detected}, errors ${result.kalshi_errors}.`;
         await updateRunProgress(jobId, {
           kalshi_markets_fetched: result.kalshi_markets_fetched,
           resolutions_detected: result.resolutions_detected,
           kalshi_errors: result.kalshi_errors,
+          errors: result.errors,
           status: 'running',
           notes: result.notes,
         });
       }
     }
 
-    result.status = 'success';
-    result.notes = `Checked ${result.kalshi_markets_fetched} Kalshi markets and detected ${result.resolutions_detected} resolutions.`;
+    result.status = result.kalshi_errors > 0 ? 'partial' : 'success';
+    result.notes = `Checked ${result.kalshi_markets_fetched} Kalshi markets and detected ${result.resolutions_detected} resolutions with ${result.kalshi_errors} errors.`;
     await updateSourceHealth({
       source: 'kalshi',
       is_available: true,

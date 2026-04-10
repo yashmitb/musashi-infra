@@ -63,6 +63,8 @@ npm run job:resolution-check
 npm run job:gap-detection
 npm run status:collection
 npm run status:crawl
+npm run status:resolution
+npm run status:gap
 ```
 
 ## GitHub Actions Secrets
@@ -99,5 +101,9 @@ Use `npm run status:collection` for a short operational summary of checkpoint pr
 Use `npm run status:crawl` when you want a throughput-oriented view of the crawl, including recent markets-per-minute and snapshots-per-minute across bounded full-sync runs.
 
 Use `npm run status:storage` when you want table counts and snapshot-growth proxies without opening Supabase usage pages.
+
+Use `npm run status:resolution` when you want to see whether settled markets are being detected and how many unresolved past-close markets remain.
+
+Use `npm run status:gap` when you want to see current snapshot gap pressure and the recent health of the backfill job.
 
 Use `npm run check:collection` when you want the process to fail if collection is stalled, unhealthy, or showing non-budget full-sync errors.

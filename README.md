@@ -95,6 +95,24 @@ GitHub Actions now runs an explicit env preflight before each scheduled job, so 
 - `SNAPSHOT_MIN_VOLUME_24H`
 - `SNAPSHOT_MIN_LIQUIDITY`
 
+## Collection Health
+- `COLLECTION_STALL_MAX_MINUTES`
+Threshold for detecting stalled collection runs
+- `COLLECTION_RUN_MAX_AGE_MINUTES`
+Maximum allowed age of last successful run
+
+
+## Crawl Advance
+- `FULL_SYNC_PAGE_BUDGET`
+Number of pages processed per run
+- `FULL_SYNC_ABSOLUTE_MAX_PAGES`
+Hard cap on total pages processed
+- `CRAWL_ADVANCE_MAX_RUNS`
+Maximum iterations per execution
+- `CRAWL_ADVANCE_MAX_DURATION_MS`
+Maximum runtime duration
+
+
 The full sync is designed to advance the exchange crawl in bounded runs. It resumes from `sync_checkpoints` until the crawl completes.
 
 Use `npm run job:crawl-advance` when you want a single command to chain multiple bounded full-sync runs together without manually relaunching each one.

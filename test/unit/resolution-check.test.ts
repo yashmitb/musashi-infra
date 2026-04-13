@@ -8,10 +8,12 @@ vi.mock('../../src/api/kalshi-client.js', () => ({
 
 vi.mock('../../src/db/markets.js', () => ({
   listResolutionCandidates: vi.fn(),
+  updateMarketLifecycle: vi.fn(),
 }));
 
 vi.mock('../../src/db/resolutions.js', () => ({
-  insertResolution: vi.fn(),
+  insertResolutions: vi.fn(),
+  applyResolvedMarketState: vi.fn(),
 }));
 
 vi.mock('../../src/db/ingestion-log.js', () => ({
@@ -30,6 +32,8 @@ vi.mock('../../src/lib/env.js', () => ({
     kalshiBaseUrl: 'https://test.kalshi.com',
     resolutionCheckMaxMarkets: 500,
     resolutionCheckProgressEveryMarkets: 25,
+    resolutionCheckFetchConcurrency: 1,
+    resolutionCheckWorkerRateLimitMs: 0,
   })),
 }));
 
@@ -37,8 +41,8 @@ vi.mock('../../src/lib/env.js', () => ({
 
 import { KalshiClient } from '../../src/api/kalshi-client.js';
 import { failOpenRuns, startRun, completeRun } from '../../src/db/ingestion-log.js';
-import { listResolutionCandidates } from '../../src/db/markets.js';
-import { insertResolution } from '../../src/db/resolutions.js';
+import { listResolutionCandidates, updateMarketLifecycle } from '../../src/db/markets.js';
+import { insertResolutions, applyResolvedMarketState } from '../../src/db/resolutions.js';
 import { updateSourceHealth } from '../../src/db/source-health.js';
 import { runResolutionCheck } from '../../src/jobs/resolution-check.js';
 
@@ -46,7 +50,9 @@ import { runResolutionCheck } from '../../src/jobs/resolution-check.js';
 const mockFetchMarket = vi.fn();
 const MockKalshiClient = vi.mocked(KalshiClient);
 const mockListCandidates = vi.mocked(listResolutionCandidates);
-const mockInsertResolution = vi.mocked(insertResolution);
+const mockUpdateMarketLifecycle = vi.mocked(updateMarketLifecycle);
+const mockInsertResolutions = vi.mocked(insertResolutions);
+const mockApplyResolvedMarketState = vi.mocked(applyResolvedMarketState);
 const mockFailOpenRuns = vi.mocked(failOpenRuns);
 const mockStartRun = vi.mocked(startRun);
 const mockCompleteRun = vi.mocked(completeRun);
@@ -80,34 +86,37 @@ describe('runResolutionCheck', () => {
     mockStartRun.mockResolvedValue(undefined);
     mockCompleteRun.mockResolvedValue(undefined);
     mockUpdateSourceHealth.mockResolvedValue(undefined);
+    mockUpdateMarketLifecycle.mockResolvedValue(undefined);
+    mockInsertResolutions.mockResolvedValue(0);
+    mockApplyResolvedMarketState.mockResolvedValue(undefined);
   });
 
   it('writes a YES resolution for a settled yes market', async () => {
     mockListCandidates.mockResolvedValue([makeCandidate()]);
     mockFetchMarket.mockResolvedValue(makeSettledMarket('yes'));
-    mockInsertResolution.mockResolvedValue(true);
+    mockInsertResolutions.mockResolvedValue(1);
 
     const result = await runResolutionCheck();
 
     expect(result.status).toBe('success');
     expect(result.resolutions_detected).toBe(1);
     expect(result.kalshi_errors).toBe(0);
-    expect(mockInsertResolution).toHaveBeenCalledWith(
-      expect.objectContaining({ market_id: 'market-1', outcome: 'YES' }),
+    expect(mockInsertResolutions).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ market_id: 'market-1', outcome: 'YES' })]),
     );
   });
 
   it('writes a NO resolution for a settled no market', async () => {
     mockListCandidates.mockResolvedValue([makeCandidate()]);
     mockFetchMarket.mockResolvedValue(makeSettledMarket('no'));
-    mockInsertResolution.mockResolvedValue(true);
+    mockInsertResolutions.mockResolvedValue(1);
 
     const result = await runResolutionCheck();
 
     expect(result.status).toBe('success');
     expect(result.resolutions_detected).toBe(1);
-    expect(mockInsertResolution).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: 'NO' }),
+    expect(mockInsertResolutions).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ outcome: 'NO' })]),
     );
   });
 
@@ -122,7 +131,7 @@ describe('runResolutionCheck', () => {
 
     expect(result.status).toBe('success');
     expect(result.resolutions_detected).toBe(0);
-    expect(mockInsertResolution).not.toHaveBeenCalled();
+    expect(mockInsertResolutions).toHaveBeenCalledWith([]);
   });
 
   it('skips a void/unexpected outcome without writing a resolution', async () => {
@@ -134,13 +143,13 @@ describe('runResolutionCheck', () => {
 
     expect(result.status).toBe('success');
     expect(result.resolutions_detected).toBe(0);
-    expect(mockInsertResolution).not.toHaveBeenCalled();
+    expect(mockInsertResolutions).toHaveBeenCalledWith([]);
   });
 
-  it('is idempotent: does not count a resolution if insertResolution returns false', async () => {
+  it('is idempotent: does not count a resolution if insertResolutions returns 0', async () => {
     mockListCandidates.mockResolvedValue([makeCandidate()]);
     mockFetchMarket.mockResolvedValue(makeSettledMarket('yes'));
-    mockInsertResolution.mockResolvedValue(false); // already exists
+    mockInsertResolutions.mockResolvedValue(0); // already exists
 
     const result = await runResolutionCheck();
 
@@ -156,7 +165,7 @@ describe('runResolutionCheck', () => {
     mockFetchMarket
       .mockRejectedValueOnce(new Error('connection timeout'))
       .mockResolvedValueOnce(makeSettledMarket('yes'));
-    mockInsertResolution.mockResolvedValue(true);
+    mockInsertResolutions.mockResolvedValue(1);
 
     const result = await runResolutionCheck();
 
@@ -202,7 +211,7 @@ describe('runResolutionCheck', () => {
 
     expect(result.status).toBe('success');
     expect(result.resolutions_detected).toBe(0);
-    expect(mockInsertResolution).not.toHaveBeenCalled();
+    expect(mockInsertResolutions).toHaveBeenCalledWith([]);
   });
 
   it('skips a settled market whose result is an empty string', async () => {
@@ -212,13 +221,13 @@ describe('runResolutionCheck', () => {
     const result = await runResolutionCheck();
 
     expect(result.resolutions_detected).toBe(0);
-    expect(mockInsertResolution).not.toHaveBeenCalled();
+    expect(mockInsertResolutions).toHaveBeenCalledWith([]);
   });
 
   it('marks source health as available on a successful run', async () => {
     mockListCandidates.mockResolvedValue([makeCandidate()]);
     mockFetchMarket.mockResolvedValue(makeSettledMarket('yes'));
-    mockInsertResolution.mockResolvedValue(true);
+    mockInsertResolutions.mockResolvedValue(1);
 
     await runResolutionCheck();
 
@@ -239,6 +248,9 @@ describe('runResolutionCheck', () => {
     mockStartRun.mockResolvedValue(undefined);
     mockCompleteRun.mockResolvedValue(undefined);
     mockUpdateSourceHealth.mockResolvedValue(undefined);
+    mockUpdateMarketLifecycle.mockResolvedValue(undefined);
+    mockInsertResolutions.mockResolvedValue(0);
+    mockApplyResolvedMarketState.mockResolvedValue(undefined);
 
     // Failure path
     mockListCandidates.mockRejectedValue(new Error('DB down'));

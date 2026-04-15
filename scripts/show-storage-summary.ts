@@ -15,8 +15,9 @@ const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
   },
 });
 
-const [marketCount, snapshotCount, resolutionCount, checkpointResult, runsResult, tableSizes, maintenance] = await Promise.all([
+const [marketCount, archiveCount, snapshotCount, resolutionCount, checkpointResult, runsResult, tableSizes, maintenance] = await Promise.all([
   countRows('markets'),
+  countRows('markets_archive'),
   countRows('market_snapshots'),
   countRows('market_resolutions'),
   supabase.from('sync_checkpoints').select('page_count,market_count,updated_at').eq('checkpoint_key', 'kalshi_full_sync').maybeSingle(),
@@ -38,6 +39,7 @@ console.log(
     {
       counts: {
         markets: marketCount,
+        markets_archive: archiveCount,
         market_snapshots: snapshotCount,
         market_resolutions: resolutionCount,
       },
@@ -62,6 +64,14 @@ async function countRows(table: string): Promise<number | null> {
     }
 
     return estimatedResult.count;
+  }
+
+  if (table === 'markets_archive') {
+    const estimatedResult = await supabase.from(table).select('id', { count: 'estimated', head: true });
+
+    if (!estimatedResult.error) {
+      return estimatedResult.count;
+    }
   }
 
   const exactResult = await supabase.from(table).select('id', { count: 'exact', head: true });
@@ -121,6 +131,8 @@ async function loadTableSizes(): Promise<Array<{ table_name: string; total_size:
 
 async function loadMaintenanceSummary(): Promise<{
   prune_candidates_older_than_24h: number;
+  compact_candidates_older_than_24h: number;
+  compacted_rows: number;
   resolved_active_rows: number;
 } | null> {
   if (
@@ -143,7 +155,7 @@ async function loadMaintenanceSummary(): Promise<{
   });
 
   try {
-    const [pruneRows, resolvedRows] = await Promise.all([
+    const [pruneRows, compactRows, compactedRows, resolvedRows] = await Promise.all([
       sql.unsafe(`select count(*)::bigint as prune_candidates
                     from markets m
                    where m.platform = 'kalshi'
@@ -153,6 +165,20 @@ async function loadMaintenanceSummary(): Promise<{
                      and m.last_snapshot_at is null
                      and m.last_ingested_at < now() - interval '24 hours'
                      and not exists (select 1 from market_resolutions r where r.market_id = m.id)`),
+      sql.unsafe(`select count(*)::bigint as compact_candidates
+                    from markets m
+                   where m.platform = 'kalshi'
+                     and m.is_active = false
+                     and m.status in ('closed', 'resolved')
+                     and (
+                       (m.status = 'closed' and m.closes_at < now() - interval '24 hours')
+                       or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < now() - interval '24 hours')
+                     )
+                     and m.is_compacted = false`),
+      sql.unsafe(`select count(*)::bigint as compacted_rows
+                    from markets
+                   where platform = 'kalshi'
+                     and is_compacted = true`),
       sql.unsafe(`select count(*)::bigint as resolved_active_rows
                     from markets
                    where platform = 'kalshi'
@@ -164,6 +190,12 @@ async function loadMaintenanceSummary(): Promise<{
     return {
       prune_candidates_older_than_24h: Number(
         (pruneRows as unknown as Array<{ prune_candidates: string }>)[0]?.prune_candidates ?? 0,
+      ),
+      compact_candidates_older_than_24h: Number(
+        (compactRows as unknown as Array<{ compact_candidates: string }>)[0]?.compact_candidates ?? 0,
+      ),
+      compacted_rows: Number(
+        (compactedRows as unknown as Array<{ compacted_rows: string }>)[0]?.compacted_rows ?? 0,
       ),
       resolved_active_rows: Number(
         (resolvedRows as unknown as Array<{ resolved_active_rows: string }>)[0]?.resolved_active_rows ?? 0,

@@ -134,3 +134,8 @@ Use `npm run check:collection` when you want the process to fail if collection i
 
 Use `npm run job:prune-inactive-markets` to inspect low-value inactive Kalshi market rows that are eligible for deletion.
 It runs in dry-run mode by default. Set `MARKET_PRUNE_EXECUTE=true` only when you intentionally want to delete prune candidates and deactivate legacy resolved rows.
+
+Use `npm run job:archive-inactive-markets` to move low-value inactive Kalshi market rows into `markets_archive` before deleting them from the hot `markets` table.
+It also runs in dry-run mode by default. Set `MARKET_ARCHIVE_EXECUTE=true` only when you intentionally want to archive and remove those rows from the hot table.
+
+Use `npm run job:compact-inactive-markets` to archive and then compact inactive Kalshi market rows once they are older than the configured age window (24 hours by default). This keeps IDs stable for snapshots and resolutions while shrinking hot-row payloads. It also runs in dry-run mode by default. Set `MARKET_COMPACT_EXECUTE=true` only when you intentionally want to compact old inactive rows.

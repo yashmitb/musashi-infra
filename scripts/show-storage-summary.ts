@@ -15,8 +15,9 @@ const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
   },
 });
 
-const [marketCount, snapshotCount, resolutionCount, checkpointResult, runsResult, tableSizes, maintenance] = await Promise.all([
+const [marketCount, archiveCount, snapshotCount, resolutionCount, checkpointResult, runsResult, tableSizes, maintenance] = await Promise.all([
   countRows('markets'),
+  countRows('markets_archive'),
   countRows('market_snapshots'),
   countRows('market_resolutions'),
   supabase.from('sync_checkpoints').select('page_count,market_count,updated_at').eq('checkpoint_key', 'kalshi_full_sync').maybeSingle(),
@@ -38,6 +39,7 @@ console.log(
     {
       counts: {
         markets: marketCount,
+        markets_archive: archiveCount,
         market_snapshots: snapshotCount,
         market_resolutions: resolutionCount,
       },
@@ -62,6 +64,14 @@ async function countRows(table: string): Promise<number | null> {
     }
 
     return estimatedResult.count;
+  }
+
+  if (table === 'markets_archive') {
+    const estimatedResult = await supabase.from(table).select('id', { count: 'estimated', head: true });
+
+    if (!estimatedResult.error) {
+      return estimatedResult.count;
+    }
   }
 
   const exactResult = await supabase.from(table).select('id', { count: 'exact', head: true });

@@ -65,27 +65,25 @@ export async function runGapDetection(): Promise<IngestionRunRecord> {
         continue;
       }
 
+      processed += 1;
+      result.kalshi_markets_fetched += 1;
+
       try {
         const raw = await client.fetchMarket(candidate.platform_id);
-        processed += 1;
-        result.kalshi_markets_fetched += 1;
 
         if (!raw) {
           continue;
         }
 
         marketsToBackfill.push(normalizeKalshiMarket(raw, startedAt).market);
-      } catch (error) {
-        processed += 1;
+      } catch (marketError) {
         result.kalshi_errors += 1;
         result.errors.push({
           source: 'kalshi',
-          error_type: 'gap_candidate_failed',
-          error_message: error instanceof Error ? error.message : String(error),
-          market_id: candidate.platform_id,
+          error_type: 'gap_detection_market_failed',
+          error_message: `${candidate.platform_id}: ${marketError instanceof Error ? marketError.message : String(marketError)}`,
         });
       }
-
       if (processed % env.gapDetectionProgressEveryMarkets === 0) {
         result.notes = `Gap detection in progress: processed ${processed}/${candidates.length}, prepared ${marketsToBackfill.length} backfills, errors ${result.kalshi_errors}.`;
         await updateRunProgress(jobId, {
@@ -105,7 +103,8 @@ export async function runGapDetection(): Promise<IngestionRunRecord> {
 
     result.kalshi_snapshots_written = snapshotResult.kalshi_written;
     result.status = result.kalshi_errors > 0 ? 'partial' : 'success';
-    result.notes = `Detected ${candidates.length} gap candidates and backfilled ${snapshotResult.total_written} snapshots with ${result.kalshi_errors} errors.`;
+    result.notes = `Detected ${candidates.length} gap candidates and backfilled ${snapshotResult.total_written} snapshots` +
+      (result.kalshi_errors > 0 ? ` (${result.kalshi_errors} per-market errors).` : '.');
     await updateSourceHealth({
       source: 'kalshi',
       is_available: true,
@@ -128,10 +127,11 @@ export async function runGapDetection(): Promise<IngestionRunRecord> {
       last_error: error instanceof Error ? error.message : String(error),
       last_error_at: new Date().toISOString(),
     });
+  } finally {
+    result.completed_at = new Date().toISOString();
+    result.duration_ms = new Date(result.completed_at).getTime() - startedAt.getTime();
+    await completeRun(result);
   }
 
-  result.completed_at = new Date().toISOString();
-  result.duration_ms = new Date(result.completed_at).getTime() - startedAt.getTime();
-  await completeRun(result);
   return result;
 }

@@ -90,11 +90,21 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
 
           const lifecycleStatus = mapResolutionLifecycleStatus(raw.status);
 
+          let outcome: 'YES' | 'NO' | null = null;
+          if (lifecycleStatus === 'resolved' && raw.result) {
+            const rawResult = raw.result.toLowerCase();
+            if (rawResult === 'yes') {
+              outcome = 'YES';
+            } else if (rawResult === 'no') {
+              outcome = 'NO';
+            }
+          }
+
           const resolution: MarketResolution | null =
-            lifecycleStatus === 'resolved' && raw.result
+            outcome !== null
               ? {
                   market_id: candidate.id,
-                  outcome: raw.result === 'yes' ? 'YES' : 'NO',
+                  outcome,
                   resolved_at: raw.latest_expiration_time ?? raw.close_time ?? startedAtIso,
                   final_yes_price: raw.last_price_dollars ? Number(raw.last_price_dollars) : null,
                   resolution_source: 'kalshi_api_v2',
@@ -107,9 +117,12 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
               ? {
                   marketId: candidate.id,
                   status: lifecycleStatus,
-                  resolved: false,
+                  resolved: lifecycleStatus === 'resolved',
                   resolution: null,
-                  resolved_at: null,
+                  resolved_at:
+                    lifecycleStatus === 'resolved'
+                      ? raw.latest_expiration_time ?? raw.close_time ?? startedAtIso
+                      : null,
                   last_ingested_at: startedAtIso,
                 }
               : null;
@@ -139,8 +152,8 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
           result.kalshi_errors += 1;
           const runError = {
             source: 'kalshi' as const,
-            error_type: 'resolution_candidate_failed',
-            error_message: error instanceof Error ? error.message : String(error),
+            error_type: 'resolution_check_market_failed',
+            error_message: `${candidate.platform_id}: ${error instanceof Error ? error.message : String(error)}`,
             market_id: candidate.platform_id,
           };
           result.errors.push(runError);
@@ -181,7 +194,8 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
     result.resolutions_detected = insertedCount;
 
     result.status = result.kalshi_errors > 0 ? 'partial' : 'success';
-    result.notes = `Checked ${result.kalshi_markets_fetched} Kalshi markets and detected ${result.resolutions_detected} resolutions with ${result.kalshi_errors} errors.`;
+    result.notes = `Checked ${result.kalshi_markets_fetched} Kalshi markets and detected ${result.resolutions_detected} resolutions` +
+      (result.kalshi_errors > 0 ? ` (${result.kalshi_errors} per-market errors).` : '.');
     await updateSourceHealth({
       source: 'kalshi',
       is_available: true,
@@ -204,11 +218,12 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
       last_error: error instanceof Error ? error.message : String(error),
       last_error_at: new Date().toISOString(),
     });
+  } finally {
+    result.completed_at = new Date().toISOString();
+    result.duration_ms = new Date(result.completed_at).getTime() - startedAt.getTime();
+    await completeRun(result);
   }
 
-  result.completed_at = new Date().toISOString();
-  result.duration_ms = new Date(result.completed_at).getTime() - startedAt.getTime();
-  await completeRun(result);
   return result;
 }
 

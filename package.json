@@ -20,6 +20,7 @@
     "job:gap-detection": "tsx scripts/run-gap-detection.ts",
     "job:prune-inactive-markets": "tsx scripts/prune-inactive-markets.ts",
     "job:archive-inactive-markets": "tsx scripts/archive-inactive-markets.ts",
+    "job:compact-inactive-markets": "tsx scripts/compact-inactive-markets.ts",
     "doctor": "tsx scripts/doctor.ts",
     "preflight:env": "tsx scripts/check-required-env.ts",
     "check:supabase": "tsx --env-file=.env scripts/check-supabase.ts",

@@ -63,12 +63,10 @@ try {
     select count(*)::bigint as count from updated`;
 
     deactivatedResolvedRows = Number(deactivated[0]?.count ?? 0);
-
     let iterations = 0;
 
     while (iterations < MAX_ITERATIONS.SCRIPT_OPERATIONS) {
       iterations++;
-
       const deleted = await sql<{ count: string }[]>`with doomed as (
         select m.id
           from markets m

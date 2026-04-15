@@ -45,7 +45,6 @@ try {
 
     while (iterations < MAX_ITERATIONS.SCRIPT_OPERATIONS) {
       iterations++;
-
       const moved = await sql<{ archived_count: string; deleted_count: string }[]>`with candidate_batch as (
         select *
           from markets m

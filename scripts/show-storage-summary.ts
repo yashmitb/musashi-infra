@@ -110,7 +110,7 @@ async function loadTableSizes(): Promise<Array<{ table_name: string; total_size:
   });
 
   try {
-    const rows = await sql`select relname as table_name,
+    const rows = await sql<{ table_name: string; total_size: string; bytes: string | number }[]>`select relname as table_name,
                                           pg_size_pretty(pg_total_relation_size(oid)) as total_size,
                                           pg_total_relation_size(oid) as bytes
                                      from pg_class
@@ -156,7 +156,7 @@ async function loadMaintenanceSummary(): Promise<{
 
   try {
     const [pruneRows, compactRows, compactedRows, resolvedRows] = await Promise.all([
-      sql`select count(*)::bigint as prune_candidates
+      sql<{ prune_candidates: string }[]>`select count(*)::bigint as prune_candidates
                     from markets m
                    where m.platform = 'kalshi'
                      and m.status = 'closed'
@@ -165,7 +165,7 @@ async function loadMaintenanceSummary(): Promise<{
                      and m.last_snapshot_at is null
                      and m.last_ingested_at < now() - interval '24 hours'
                      and not exists (select 1 from market_resolutions r where r.market_id = m.id)`,
-      sql`select count(*)::bigint as compact_candidates
+      sql<{ compact_candidates: string }[]>`select count(*)::bigint as compact_candidates
                     from markets m
                    where m.platform = 'kalshi'
                      and m.is_active = false
@@ -175,11 +175,11 @@ async function loadMaintenanceSummary(): Promise<{
                        or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < now() - interval '24 hours')
                      )
                      and m.is_compacted = false`,
-      sql`select count(*)::bigint as compacted_rows
+      sql<{ compacted_rows: string }[]>`select count(*)::bigint as compacted_rows
                     from markets
                    where platform = 'kalshi'
                      and is_compacted = true`,
-      sql`select count(*)::bigint as resolved_active_rows
+      sql<{ resolved_active_rows: string }[]>`select count(*)::bigint as resolved_active_rows
                     from markets
                    where platform = 'kalshi'
                      and status = 'resolved'

@@ -13,6 +13,7 @@ const minAgeHours = Number(env.MARKET_COMPACT_MIN_AGE_HOURS ?? '24');
 const batchSize = Number(env.MARKET_COMPACT_BATCH_SIZE ?? '1000');
 const execute = env.MARKET_COMPACT_EXECUTE === 'true';
 const cutoffIso = new Date(Date.now() - minAgeHours * 60 * 60 * 1000).toISOString();
+const MAX_SCRIPT_ITERATIONS = 10000;
 
 const sql = postgres({
   host,
@@ -25,32 +26,35 @@ const sql = postgres({
 });
 
 try {
-  const candidateRows = await sql.unsafe<{ compact_candidates: string }[]>(`select count(*)::bigint as compact_candidates
+  const candidateRows = await sql<{ compact_candidates: string }[]>`select count(*)::bigint as compact_candidates
     from markets m
    where m.platform = 'kalshi'
      and m.is_active = false
      and m.status in ('closed', 'resolved')
      and (
-       (m.status = 'closed' and m.closes_at < '${cutoffIso}')
-       or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < '${cutoffIso}')
+       (m.status = 'closed' and m.closes_at < ${cutoffIso})
+       or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < ${cutoffIso})
      )
-     and m.is_compacted = false`);
+     and m.is_compacted = false`;
 
   const compactCandidates = Number(candidateRows[0]?.compact_candidates ?? 0);
   let archivedCount = 0;
   let compactedCount = 0;
 
   if (execute) {
-    while (true) {
-      const moved = await sql.unsafe<{ archived_count: string; compacted_count: string }[]>(`with candidate_batch as (
+    let iterations = 0;
+
+    while (iterations < MAX_SCRIPT_ITERATIONS) {
+      iterations += 1;
+      const moved = await sql<{ archived_count: string; compacted_count: string }[]>`with candidate_batch as (
         select id
           from markets m
          where m.platform = 'kalshi'
            and m.is_active = false
            and m.status in ('closed', 'resolved')
            and (
-             (m.status = 'closed' and m.closes_at < '${cutoffIso}')
-             or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < '${cutoffIso}')
+             (m.status = 'closed' and m.closes_at < ${cutoffIso})
+             or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < ${cutoffIso})
            )
            and m.is_compacted = false
          order by coalesce(m.resolved_at, m.closes_at, m.last_ingested_at) asc
@@ -138,7 +142,7 @@ try {
       )
       select
         (select count(*)::bigint from archived) as archived_count,
-        (select count(*)::bigint from compacted) as compacted_count`);
+        (select count(*)::bigint from compacted) as compacted_count`;
 
       const archivedBatch = Number(moved[0]?.archived_count ?? 0);
       const compactedBatch = Number(moved[0]?.compacted_count ?? 0);
@@ -149,6 +153,10 @@ try {
       if (compactedBatch === 0) {
         break;
       }
+    }
+
+    if (iterations >= MAX_SCRIPT_ITERATIONS) {
+      throw new Error(`Compaction loop exceeded ${MAX_SCRIPT_ITERATIONS} iterations before exhausting candidates.`);
     }
   }
 

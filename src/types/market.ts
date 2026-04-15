@@ -1,7 +1,6 @@
+import { z } from 'zod';
+
 export const MARKET_PLATFORMS = ['kalshi', 'polymarket'] as const;
-
-export type MarketPlatform = (typeof MARKET_PLATFORMS)[number];
-
 export const MARKET_CATEGORIES = [
   'fed_policy',
   'economics',
@@ -15,110 +14,58 @@ export const MARKET_CATEGORIES = [
   'entertainment',
   'other',
 ] as const;
-
-export type MarketCategory = (typeof MARKET_CATEGORIES)[number];
-
 export const MARKET_STATUSES = ['open', 'closed', 'resolved'] as const;
-
-export type MarketStatus = (typeof MARKET_STATUSES)[number];
-
 export const RESOLUTION_OUTCOMES = ['YES', 'NO'] as const;
 
-export type ResolutionOutcome = (typeof RESOLUTION_OUTCOMES)[number];
+// Zod schemas for runtime validation
+export const MarketPlatformSchema = z.enum(MARKET_PLATFORMS);
+export const MarketCategorySchema = z.enum(MARKET_CATEGORIES);
+export const MarketStatusSchema = z.enum(MARKET_STATUSES);
+export const ResolutionOutcomeSchema = z.enum(RESOLUTION_OUTCOMES).nullable();
 
-export interface MusashiMarket {
-  id: string;
-  platform: MarketPlatform;
-  platform_id: string;
-  event_id: string | null;
-  series_id: string | null;
-  title: string;
-  description: string | null;
-  category: MarketCategory;
-  url: string;
-  yes_price: number;
-  no_price: number;
-  volume_24h: number;
-  open_interest: number | null;
-  liquidity: number | null;
-  spread: number | null;
-  status: MarketStatus;
-  created_at: string | null;
-  closes_at: string | null;
-  resolved: boolean;
-  resolution: ResolutionOutcome | null;
-  resolved_at: string | null;
-  fetched_at: string;
-  cache_hit: boolean;
-  data_age_seconds: number;
-}
+export const MusashiMarketSchema = z.object({
+  id: z.string().startsWith('musashi-'),
+  platform: MarketPlatformSchema,
+  platform_id: z.string().min(1),
+  event_id: z.string().nullable(),
+  series_id: z.string().nullable(),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  category: MarketCategorySchema,
+  url: z.string().url(),
+  yes_price: z.number().min(0).max(1),
+  no_price: z.number().min(0).max(1),
+  volume_24h: z.number().nonnegative(),
+  open_interest: z.number().nullable(),
+  liquidity: z.number().nullable(),
+  spread: z.number().nullable(),
+  status: MarketStatusSchema,
+  created_at: z.string().nullable(),
+  closes_at: z.string().nullable(),
+  resolved: z.boolean(),
+  resolution: ResolutionOutcomeSchema,
+  resolved_at: z.string().nullable(),
+  fetched_at: z.string(),
+  cache_hit: z.boolean(),
+  data_age_seconds: z.number().nonnegative(),
+}).refine(
+  (data) => Math.abs(data.yes_price + data.no_price - 1) < 0.001,
+  { message: 'yes_price and no_price must sum to approximately 1' }
+);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
+// Inferred types from schemas
+export type MarketPlatform = z.infer<typeof MarketPlatformSchema>;
+export type MarketCategory = z.infer<typeof MarketCategorySchema>;
+export type MarketStatus = z.infer<typeof MarketStatusSchema>;
+export type ResolutionOutcome = NonNullable<z.infer<typeof ResolutionOutcomeSchema>>;
+export type MusashiMarket = z.infer<typeof MusashiMarketSchema>;
 
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === 'string';
-}
-
-function isNullableNumber(value: unknown): value is number | null {
-  return value === null || typeof value === 'number';
-}
-
-function isMarketCategory(value: unknown): value is MarketCategory {
-  return typeof value === 'string' && MARKET_CATEGORIES.includes(value as MarketCategory);
-}
-
-function isMarketPlatform(value: unknown): value is MarketPlatform {
-  return typeof value === 'string' && MARKET_PLATFORMS.includes(value as MarketPlatform);
-}
-
-function isMarketStatus(value: unknown): value is MarketStatus {
-  return typeof value === 'string' && MARKET_STATUSES.includes(value as MarketStatus);
-}
-
-function isResolutionOutcome(value: unknown): value is ResolutionOutcome | null {
-  return value === null || (typeof value === 'string' && RESOLUTION_OUTCOMES.includes(value as ResolutionOutcome));
-}
-
+// Type guard using Zod validation
 export function isMusashiMarket(value: unknown): value is MusashiMarket {
-  if (!isRecord(value)) {
-    return false;
-  }
+  return MusashiMarketSchema.safeParse(value).success;
+}
 
-  return (
-    typeof value.id === 'string' &&
-    value.id.startsWith('musashi-') &&
-    isMarketPlatform(value.platform) &&
-    typeof value.platform_id === 'string' &&
-    value.platform_id.length > 0 &&
-    isNullableString(value.event_id) &&
-    isNullableString(value.series_id) &&
-    typeof value.title === 'string' &&
-    value.title.length > 0 &&
-    isNullableString(value.description) &&
-    isMarketCategory(value.category) &&
-    typeof value.url === 'string' &&
-    typeof value.yes_price === 'number' &&
-    value.yes_price >= 0 &&
-    value.yes_price <= 1 &&
-    typeof value.no_price === 'number' &&
-    value.no_price >= 0 &&
-    value.no_price <= 1 &&
-    Math.abs(value.yes_price + value.no_price - 1) < 0.001 &&
-    typeof value.volume_24h === 'number' &&
-    isNullableNumber(value.open_interest) &&
-    isNullableNumber(value.liquidity) &&
-    isNullableNumber(value.spread) &&
-    isMarketStatus(value.status) &&
-    isNullableString(value.created_at) &&
-    isNullableString(value.closes_at) &&
-    typeof value.resolved === 'boolean' &&
-    isResolutionOutcome(value.resolution) &&
-    isNullableString(value.resolved_at) &&
-    typeof value.fetched_at === 'string' &&
-    typeof value.cache_hit === 'boolean' &&
-    typeof value.data_age_seconds === 'number' &&
-    value.data_age_seconds >= 0
-  );
+// Validate and parse with detailed error messages
+export function parseMusashiMarket(value: unknown): MusashiMarket {
+  return MusashiMarketSchema.parse(value);
 }

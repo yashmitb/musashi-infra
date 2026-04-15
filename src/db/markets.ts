@@ -1,11 +1,12 @@
 import type { NormalizerResult } from '../api/normalizer.js';
 import { chunkArray } from '../lib/collections.js';
+import { BATCH_SIZES, MAX_ITERATIONS } from '../lib/constants.js';
 import { isMarketActive } from '../lib/market-lifecycle.js';
 import type { MusashiMarket } from '../types/market.js';
 import type { MarketStatus, ResolutionOutcome } from '../types/market.js';
 import { getSupabase } from './supabase.js';
 
-const DB_BATCH_SIZE = 200;
+const DB_BATCH_SIZE = BATCH_SIZES.DB_BATCH;
 
 export interface MarketUpsertResult {
   kalshi_new: number;
@@ -192,8 +193,11 @@ export async function reconcileMissingOpenMarkets(
 ): Promise<number> {
   const supabase = getSupabase();
   let totalUpdated = 0;
+  let iterations = 0;
 
-  while (true) {
+  while (iterations < MAX_ITERATIONS.DB_RECONCILIATION) {
+    iterations++;
+
     const { data: staleRows, error: selectError } = await supabase
       .from('markets')
       .select('id')
@@ -226,6 +230,12 @@ export async function reconcileMissingOpenMarkets(
     }
 
     totalUpdated += ids.length;
+  }
+
+  if (iterations >= MAX_ITERATIONS.DB_RECONCILIATION) {
+    throw new Error(
+      `Reconciliation exceeded maximum iterations (${MAX_ITERATIONS.DB_RECONCILIATION}). Updated ${totalUpdated} markets before stopping.`
+    );
   }
 
   return totalUpdated;

@@ -110,14 +110,14 @@ async function loadTableSizes(): Promise<Array<{ table_name: string; total_size:
   });
 
   try {
-    const rows = await sql.unsafe(`select relname as table_name,
+    const rows = await sql`select relname as table_name,
                                           pg_size_pretty(pg_total_relation_size(oid)) as total_size,
                                           pg_total_relation_size(oid) as bytes
                                      from pg_class
                                     where relkind = 'r'
                                       and relnamespace = 'public'::regnamespace
                                     order by pg_total_relation_size(oid) desc
-                                    limit 12`);
+                                    limit 12`;
 
     return Array.from(rows as unknown as Array<{ table_name: string; total_size: string; bytes: number }>).map((row) => ({
       table_name: row.table_name,
@@ -156,7 +156,7 @@ async function loadMaintenanceSummary(): Promise<{
 
   try {
     const [pruneRows, compactRows, compactedRows, resolvedRows] = await Promise.all([
-      sql.unsafe(`select count(*)::bigint as prune_candidates
+      sql`select count(*)::bigint as prune_candidates
                     from markets m
                    where m.platform = 'kalshi'
                      and m.status = 'closed'
@@ -164,8 +164,8 @@ async function loadMaintenanceSummary(): Promise<{
                      and m.is_active = false
                      and m.last_snapshot_at is null
                      and m.last_ingested_at < now() - interval '24 hours'
-                     and not exists (select 1 from market_resolutions r where r.market_id = m.id)`),
-      sql.unsafe(`select count(*)::bigint as compact_candidates
+                     and not exists (select 1 from market_resolutions r where r.market_id = m.id)`,
+      sql`select count(*)::bigint as compact_candidates
                     from markets m
                    where m.platform = 'kalshi'
                      and m.is_active = false
@@ -174,17 +174,17 @@ async function loadMaintenanceSummary(): Promise<{
                        (m.status = 'closed' and m.closes_at < now() - interval '24 hours')
                        or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < now() - interval '24 hours')
                      )
-                     and m.is_compacted = false`),
-      sql.unsafe(`select count(*)::bigint as compacted_rows
+                     and m.is_compacted = false`,
+      sql`select count(*)::bigint as compacted_rows
                     from markets
                    where platform = 'kalshi'
-                     and is_compacted = true`),
-      sql.unsafe(`select count(*)::bigint as resolved_active_rows
+                     and is_compacted = true`,
+      sql`select count(*)::bigint as resolved_active_rows
                     from markets
                    where platform = 'kalshi'
                      and status = 'resolved'
                      and resolved = true
-                     and is_active = true`),
+                     and is_active = true`,
     ]);
 
     return {

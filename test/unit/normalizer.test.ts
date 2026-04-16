@@ -47,6 +47,8 @@ describe('normalizeKalshiMarket', () => {
     expect(market.liquidity).toBe(40000);
     expect(market.spread).toBe(0.02);
     expect(market.status).toBe('open');
+    expect(market.closes_at).toBe('2026-04-08T23:59:59Z');
+    expect(market.settles_at).toBe('2026-04-08T23:59:59Z');
     expect(market.resolved).toBe(false);
     expect(market.resolution).toBeNull();
   });

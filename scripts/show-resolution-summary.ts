@@ -37,7 +37,7 @@ const [steadyRunsResult, backfillRunsResult, unresolvedResult, resolutionCountRe
     .from('markets')
     .select('id', { count: 'estimated', head: true })
     .eq('resolved', false)
-    .lte('closes_at', nowIso),
+    .or(`settles_at.lte.${nowIso},and(settles_at.is.null,closes_at.lte.${nowIso})`),
   supabase.from('market_resolutions').select('id', { count: 'estimated', head: true }),
 ]);
 

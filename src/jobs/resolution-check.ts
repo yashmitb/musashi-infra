@@ -123,6 +123,7 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
                     lifecycleStatus === 'resolved'
                       ? (raw.latest_expiration_time ?? raw.close_time ?? startedAtIso)
                       : null,
+                  settles_at: raw.latest_expiration_time ?? raw.close_time ?? candidate.settles_at,
                   last_ingested_at: startedAtIso,
                 }
               : null;

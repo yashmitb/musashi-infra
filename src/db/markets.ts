@@ -19,6 +19,7 @@ export interface ResolutionCandidate {
   platform: MusashiMarket['platform'];
   platform_id: string;
   closes_at: string | null;
+  settles_at: string | null;
 }
 
 export interface SnapshotGapCandidate {
@@ -47,6 +48,7 @@ interface MarketRow {
   status: MusashiMarket['status'];
   created_at: string | null;
   closes_at: string | null;
+  settles_at: string | null;
   resolved: boolean;
   resolution: MusashiMarket['resolution'];
   resolved_at: string | null;
@@ -118,24 +120,25 @@ export async function upsertMarkets(records: NormalizerResult[]): Promise<Market
 
 export async function listResolutionCandidates(now: Date, limit?: number): Promise<ResolutionCandidate[]> {
   const supabase = getSupabase();
-  let query = supabase
-    .from('markets')
-    .select('id, platform, platform_id, closes_at')
-    .eq('resolved', false)
-    .lte('closes_at', now.toISOString())
-    .order('closes_at', { ascending: true });
+  const nowIso = now.toISOString();
+  const terminalCandidates = await fetchResolutionCandidateBatch(supabase, {
+    nowIso,
+    status: 'terminal',
+    ...(limit === undefined ? {} : { limit }),
+  });
 
-  if (limit !== undefined) {
-    query = query.limit(limit);
+  if (limit !== undefined && terminalCandidates.length >= limit) {
+    return terminalCandidates;
   }
 
-  const { data, error } = await query;
+  const remainingLimit = limit === undefined ? undefined : limit - terminalCandidates.length;
+  const openCandidates = await fetchResolutionCandidateBatch(supabase, {
+    nowIso,
+    status: 'open',
+    ...(remainingLimit === undefined ? {} : { limit: remainingLimit }),
+  });
 
-  if (error) {
-    throw new Error(`Failed to list resolution candidates: ${error.message}`);
-  }
-
-  return (data ?? []) as ResolutionCandidate[];
+  return dedupeResolutionCandidates([...terminalCandidates, ...openCandidates], limit);
 }
 
 export async function listSnapshotGapCandidates(thresholdIso: string, limit?: number): Promise<SnapshotGapCandidate[]> {
@@ -166,6 +169,7 @@ export async function updateMarketLifecycle(
     resolved: boolean;
     resolution: ResolutionOutcome | null;
     resolved_at: string | null;
+    settles_at?: string | null;
     last_ingested_at: string;
   }
 ): Promise<void> {
@@ -177,6 +181,7 @@ export async function updateMarketLifecycle(
       resolved: updates.resolved,
       resolution: updates.resolution,
       resolved_at: updates.resolved_at,
+      settles_at: updates.settles_at,
       last_ingested_at: updates.last_ingested_at,
       is_active: isMarketActive(updates.status, updates.resolved),
     })
@@ -261,10 +266,65 @@ function toMarketRow({ market }: NormalizerResult): MarketRow {
     status: market.status,
     created_at: market.created_at,
     closes_at: market.closes_at,
+    settles_at: market.settles_at,
     resolved: market.resolved,
     resolution: market.resolution,
     resolved_at: market.resolved_at,
     last_ingested_at: market.fetched_at,
     is_active: true,
   };
+}
+
+async function fetchResolutionCandidateBatch(
+  supabase: ReturnType<typeof getSupabase>,
+  options: {
+    nowIso: string;
+    status: 'terminal' | 'open';
+    limit?: number;
+  }
+): Promise<ResolutionCandidate[]> {
+  let query = supabase
+    .from('markets')
+    .select('id, platform, platform_id, closes_at, settles_at')
+    .eq('resolved', false)
+    .or(`settles_at.lte.${options.nowIso},and(settles_at.is.null,closes_at.lte.${options.nowIso})`)
+    .order('closes_at', { ascending: true });
+
+  if (options.status === 'terminal') {
+    query = query.in('status', ['closed', 'resolved']);
+  } else {
+    query = query.eq('status', 'open');
+  }
+
+  if (options.limit !== undefined) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list ${options.status} resolution candidates: ${error.message}`);
+  }
+
+  return (data ?? []) as ResolutionCandidate[];
+}
+
+function dedupeResolutionCandidates(candidates: ResolutionCandidate[], limit?: number): ResolutionCandidate[] {
+  const seen = new Set<string>();
+  const deduped: ResolutionCandidate[] = [];
+
+  for (const candidate of candidates) {
+    if (seen.has(candidate.id)) {
+      continue;
+    }
+
+    seen.add(candidate.id);
+    deduped.push(candidate);
+
+    if (limit !== undefined && deduped.length >= limit) {
+      break;
+    }
+  }
+
+  return deduped;
 }

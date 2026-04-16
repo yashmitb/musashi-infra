@@ -178,8 +178,8 @@ async function loadMaintenanceSummary(): Promise<{
                      and m.is_active = false
                      and m.status in ('closed', 'resolved')
                      and (
-                       (m.status = 'closed' and m.closes_at < now() - interval '24 hours')
-                       or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < now() - interval '24 hours')
+                       (m.status = 'closed' and coalesce(m.settles_at, m.closes_at) < now() - interval '24 hours')
+                       or (m.status = 'resolved' and coalesce(m.resolved_at, m.settles_at, m.closes_at) < now() - interval '24 hours')
                      )
                      and m.is_compacted = false`,
       sql<{ compacted_rows: string }[]>`select count(*)::bigint as compacted_rows

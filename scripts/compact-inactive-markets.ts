@@ -32,8 +32,8 @@ try {
      and m.is_active = false
      and m.status in ('closed', 'resolved')
      and (
-       (m.status = 'closed' and m.closes_at < ${cutoffIso})
-       or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < ${cutoffIso})
+       (m.status = 'closed' and coalesce(m.settles_at, m.closes_at) < ${cutoffIso})
+       or (m.status = 'resolved' and coalesce(m.resolved_at, m.settles_at, m.closes_at) < ${cutoffIso})
      )
      and m.is_compacted = false`;
 
@@ -53,11 +53,11 @@ try {
            and m.is_active = false
            and m.status in ('closed', 'resolved')
            and (
-             (m.status = 'closed' and m.closes_at < ${cutoffIso})
-             or (m.status = 'resolved' and coalesce(m.resolved_at, m.closes_at) < ${cutoffIso})
+             (m.status = 'closed' and coalesce(m.settles_at, m.closes_at) < ${cutoffIso})
+             or (m.status = 'resolved' and coalesce(m.resolved_at, m.settles_at, m.closes_at) < ${cutoffIso})
            )
            and m.is_compacted = false
-         order by coalesce(m.resolved_at, m.closes_at, m.last_ingested_at) asc
+         order by coalesce(m.resolved_at, m.settles_at, m.closes_at, m.last_ingested_at) asc
          limit ${batchSize}
       ), archived as (
         insert into markets_archive (
@@ -79,6 +79,7 @@ try {
           status,
           created_at,
           closes_at,
+          settles_at,
           resolved,
           resolution,
           resolved_at,
@@ -108,6 +109,7 @@ try {
           m.status,
           m.created_at,
           m.closes_at,
+          m.settles_at,
           m.resolved,
           m.resolution,
           m.resolved_at,

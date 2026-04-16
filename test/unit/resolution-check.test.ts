@@ -67,7 +67,13 @@ function makeSettledMarket(result: string = 'yes') {
 }
 
 function makeCandidate(id = 'market-1', platformId = 'TEST-MARKET') {
-  return { id, platform: 'kalshi' as const, platform_id: platformId, closes_at: '2026-01-01T00:00:00Z' };
+  return {
+    id,
+    platform: 'kalshi' as const,
+    platform_id: platformId,
+    closes_at: '2026-01-01T00:00:00Z',
+    settles_at: '2026-01-01T00:00:00Z',
+  };
 }
 
 describe('runResolutionCheck', () => {

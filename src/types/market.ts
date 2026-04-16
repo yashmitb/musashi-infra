@@ -43,6 +43,7 @@ export const MusashiMarketSchema = z
     status: MarketStatusSchema,
     created_at: z.string().nullable(),
     closes_at: z.string().nullable(),
+    settles_at: z.string().nullable(),
     resolved: z.boolean(),
     resolution: ResolutionOutcomeSchema,
     resolved_at: z.string().nullable(),

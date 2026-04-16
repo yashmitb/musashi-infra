@@ -30,6 +30,7 @@ function buildMarket(overrides: Partial<MusashiMarket> = {}): MusashiMarket {
     status: 'open',
     created_at: '2026-04-10T00:00:00Z',
     closes_at: '2026-05-01T00:00:00Z',
+    settles_at: null,
     resolved: false,
     resolution: null,
     resolved_at: null,

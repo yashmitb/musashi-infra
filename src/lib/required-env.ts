@@ -1,6 +1,6 @@
 export function findMissingEnv(
   requiredNames: string[],
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): string[] {
   return requiredNames.filter((name) => !env[name]);
 }

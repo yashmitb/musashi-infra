@@ -31,6 +31,6 @@ console.log(
       sourceHealthError: healthResult.error,
     },
     null,
-    2,
-  ),
+    2
+  )
 );

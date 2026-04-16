@@ -12,8 +12,8 @@ describe('KalshiClient', () => {
             cursor: 'next-page',
             markets: [{ ticker: 'ONE', event_ticker: 'EV1', market_type: 'binary', status: 'open' }],
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
       )
       .mockResolvedValueOnce(
         new Response(
@@ -21,8 +21,8 @@ describe('KalshiClient', () => {
             cursor: '',
             markets: [{ ticker: 'TWO', event_ticker: 'EV2', market_type: 'binary', status: 'open' }],
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
       );
 
     const client = new KalshiClient({
@@ -38,7 +38,9 @@ describe('KalshiClient', () => {
   });
 
   it('returns null on 404 market fetches', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404, statusText: 'Not Found' }));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 404, statusText: 'Not Found' }));
     const client = new KalshiClient({
       fetchImpl,
       rateLimitMs: 0,
@@ -56,8 +58,8 @@ describe('KalshiClient', () => {
             cursor: 'next-page',
             markets: [{ ticker: 'ONE', event_ticker: 'EV1', market_type: 'binary', status: 'open' }],
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
       )
       .mockResolvedValueOnce(
         new Response(
@@ -65,8 +67,8 @@ describe('KalshiClient', () => {
             cursor: '',
             markets: [{ ticker: 'TWO', event_ticker: 'EV2', market_type: 'binary', status: 'open' }],
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
       );
 
     const client = new KalshiClient({ fetchImpl, rateLimitMs: 0 });
@@ -88,8 +90,8 @@ describe('KalshiClient', () => {
             cursor: 'same-cursor',
             markets: [{ ticker: 'ONE', event_ticker: 'EV1', market_type: 'binary', status: 'open' }],
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
       )
       .mockResolvedValueOnce(
         new Response(
@@ -97,14 +99,15 @@ describe('KalshiClient', () => {
             cursor: 'same-cursor',
             markets: [{ ticker: 'TWO', event_ticker: 'EV2', market_type: 'binary', status: 'open' }],
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
       );
 
     const client = new KalshiClient({ fetchImpl, rateLimitMs: 0 });
 
     await expect(async () => {
-      for await (const _page of client.iterateMarkets({ maxPages: 10 })) {
+      for await (const page of client.iterateMarkets({ maxPages: 10 })) {
+        void page;
         // exhaust the iterator
       }
     }).rejects.toThrow('cursor repeated');

@@ -15,7 +15,7 @@ export function chunkArray<T>(items: T[], chunkSize: number): T[][] {
 export async function mapWithConcurrency<TInput, TOutput>(
   items: TInput[],
   concurrency: number,
-  mapper: (item: TInput, index: number) => Promise<TOutput>,
+  mapper: (item: TInput, index: number) => Promise<TOutput>
 ): Promise<TOutput[]> {
   if (concurrency <= 0) {
     throw new Error('concurrency must be greater than zero');
@@ -40,7 +40,7 @@ export async function mapWithConcurrency<TInput, TOutput>(
   await Promise.all(
     Array.from({ length: Math.min(concurrency, items.length) }, async () => {
       await worker();
-    }),
+    })
   );
 
   return results;

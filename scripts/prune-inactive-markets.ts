@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 
+import { MAX_ITERATIONS } from '../src/lib/constants.js';
 import { loadRuntimeEnv } from '../src/lib/runtime-env.js';
 
 const env = await loadRuntimeEnv(new URL('../.env', import.meta.url));
@@ -26,21 +27,21 @@ const sql = postgres({
 
 try {
   const [pruneCandidateRow, resolvedActiveRow] = await Promise.all([
-    sql.unsafe<{ prune_candidates: string }[]>(`select count(*)::bigint as prune_candidates
+    sql<{ prune_candidates: string }[]>`select count(*)::bigint as prune_candidates
       from markets m
       where m.platform = 'kalshi'
         and m.status = 'closed'
         and m.resolved = false
         and m.is_active = false
         and m.last_snapshot_at is null
-        and m.last_ingested_at < '${cutoffIso}'
-        and not exists (select 1 from market_resolutions r where r.market_id = m.id)`),
-    sql.unsafe<{ resolved_active_rows: string }[]>(`select count(*)::bigint as resolved_active_rows
+        and m.last_ingested_at < ${cutoffIso}
+        and not exists (select 1 from market_resolutions r where r.market_id = m.id)`,
+    sql<{ resolved_active_rows: string }[]>`select count(*)::bigint as resolved_active_rows
       from markets
       where platform = 'kalshi'
         and status = 'resolved'
         and resolved = true
-        and is_active = true`),
+        and is_active = true`,
   ]);
 
   const pruneCandidates = Number(pruneCandidateRow[0]?.prune_candidates ?? 0);
@@ -50,7 +51,7 @@ try {
   let deletedPruneCandidates = 0;
 
   if (execute) {
-    const deactivated = await sql.unsafe<{ count: string }[]>(`with updated as (
+    const deactivated = await sql<{ count: string }[]>`with updated as (
       update markets
          set is_active = false
        where platform = 'kalshi'
@@ -59,12 +60,14 @@ try {
          and is_active = true
       returning id
     )
-    select count(*)::bigint as count from updated`);
+    select count(*)::bigint as count from updated`;
 
     deactivatedResolvedRows = Number(deactivated[0]?.count ?? 0);
+    let iterations = 0;
 
-    while (true) {
-      const deleted = await sql.unsafe<{ count: string }[]>(`with doomed as (
+    while (iterations < MAX_ITERATIONS.SCRIPT_OPERATIONS) {
+      iterations++;
+      const deleted = await sql<{ count: string }[]>`with doomed as (
         select m.id
           from markets m
          where m.platform = 'kalshi'
@@ -72,7 +75,7 @@ try {
            and m.resolved = false
            and m.is_active = false
            and m.last_snapshot_at is null
-           and m.last_ingested_at < '${cutoffIso}'
+           and m.last_ingested_at < ${cutoffIso}
            and not exists (select 1 from market_resolutions r where r.market_id = m.id)
          limit ${batchSize}
       ), removed as (
@@ -80,7 +83,7 @@ try {
          where id in (select id from doomed)
          returning id
       )
-      select count(*)::bigint as count from removed`);
+      select count(*)::bigint as count from removed`;
 
       const deletedCount = Number(deleted[0]?.count ?? 0);
       deletedPruneCandidates += deletedCount;
@@ -88,6 +91,12 @@ try {
       if (deletedCount === 0) {
         break;
       }
+    }
+
+    if (iterations >= MAX_ITERATIONS.SCRIPT_OPERATIONS) {
+      throw new Error(
+        `Pruning exceeded maximum iterations (${MAX_ITERATIONS.SCRIPT_OPERATIONS}). Consider increasing batch size.`
+      );
     }
   }
 
@@ -104,8 +113,8 @@ try {
         deactivated_resolved_rows: deactivatedResolvedRows,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 } finally {
   await sql.end();

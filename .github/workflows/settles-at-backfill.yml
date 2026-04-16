@@ -1,0 +1,39 @@
+name: Settles At Backfill
+
+on:
+  schedule:
+    - cron: '25 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: settles-at-backfill
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run preflight:env -- SUPABASE_URL SUPABASE_SERVICE_KEY
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      - run: npm run job:settles-at-backfill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          KALSHI_BASE_URL: ${{ secrets.KALSHI_BASE_URL }}
+          SETTLES_AT_BACKFILL_MAX_RUNS: '3'
+          SETTLES_AT_BACKFILL_MAX_DURATION_MS: '900000'
+          SETTLES_AT_BACKFILL_MAX_MARKETS: '400'
+          SETTLES_AT_BACKFILL_FETCH_CONCURRENCY: '3'
+          SETTLES_AT_BACKFILL_WORKER_RATE_LIMIT_MS: '200'

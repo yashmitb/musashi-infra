@@ -1,11 +1,12 @@
 import type { NormalizerResult } from '../api/normalizer.js';
 import { chunkArray } from '../lib/collections.js';
+import { BATCH_SIZES, MAX_ITERATIONS } from '../lib/constants.js';
 import { isMarketActive } from '../lib/market-lifecycle.js';
 import type { MusashiMarket } from '../types/market.js';
 import type { MarketStatus, ResolutionOutcome } from '../types/market.js';
 import { getSupabase } from './supabase.js';
 
-const DB_BATCH_SIZE = 200;
+const DB_BATCH_SIZE = BATCH_SIZES.DB_BATCH;
 
 export interface MarketUpsertResult {
   kalshi_new: number;
@@ -18,6 +19,7 @@ export interface ResolutionCandidate {
   platform: MusashiMarket['platform'];
   platform_id: string;
   closes_at: string | null;
+  settles_at: string | null;
 }
 
 export interface SnapshotGapCandidate {
@@ -25,6 +27,12 @@ export interface SnapshotGapCandidate {
   platform: MusashiMarket['platform'];
   platform_id: string;
   last_snapshot_at: string | null;
+}
+
+export interface SettlesAtBackfillCandidate {
+  id: string;
+  platform_id: string;
+  closes_at: string | null;
 }
 
 interface MarketRow {
@@ -46,6 +54,7 @@ interface MarketRow {
   status: MusashiMarket['status'];
   created_at: string | null;
   closes_at: string | null;
+  settles_at: string | null;
   resolved: boolean;
   resolution: MusashiMarket['resolution'];
   resolved_at: string | null;
@@ -117,24 +126,25 @@ export async function upsertMarkets(records: NormalizerResult[]): Promise<Market
 
 export async function listResolutionCandidates(now: Date, limit?: number): Promise<ResolutionCandidate[]> {
   const supabase = getSupabase();
-  let query = supabase
-    .from('markets')
-    .select('id, platform, platform_id, closes_at')
-    .eq('resolved', false)
-    .lte('closes_at', now.toISOString())
-    .order('closes_at', { ascending: true });
+  const nowIso = now.toISOString();
+  const terminalCandidates = await fetchResolutionCandidateBatch(supabase, {
+    nowIso,
+    status: 'terminal',
+    ...(limit === undefined ? {} : { limit }),
+  });
 
-  if (limit !== undefined) {
-    query = query.limit(limit);
+  if (limit !== undefined && terminalCandidates.length >= limit) {
+    return terminalCandidates;
   }
 
-  const { data, error } = await query;
+  const remainingLimit = limit === undefined ? undefined : limit - terminalCandidates.length;
+  const openCandidates = await fetchResolutionCandidateBatch(supabase, {
+    nowIso,
+    status: 'open',
+    ...(remainingLimit === undefined ? {} : { limit: remainingLimit }),
+  });
 
-  if (error) {
-    throw new Error(`Failed to list resolution candidates: ${error.message}`);
-  }
-
-  return (data ?? []) as ResolutionCandidate[];
+  return dedupeResolutionCandidates([...terminalCandidates, ...openCandidates], limit);
 }
 
 export async function listSnapshotGapCandidates(thresholdIso: string, limit?: number): Promise<SnapshotGapCandidate[]> {
@@ -158,6 +168,36 @@ export async function listSnapshotGapCandidates(thresholdIso: string, limit?: nu
   return (data ?? []) as SnapshotGapCandidate[];
 }
 
+export async function listSettlesAtBackfillCandidates(
+  now: Date,
+  limit?: number
+): Promise<SettlesAtBackfillCandidate[]> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from('markets')
+    .select('id, platform_id, closes_at')
+    .eq('platform', 'kalshi')
+    .eq('resolved', false)
+    .eq('is_active', false)
+    .eq('status', 'closed')
+    .is('settles_at', null)
+    .not('closes_at', 'is', null)
+    .lte('closes_at', now.toISOString())
+    .order('closes_at', { ascending: true });
+
+  if (limit !== undefined) {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list settles_at backfill candidates: ${error.message}`);
+  }
+
+  return (data ?? []) as SettlesAtBackfillCandidate[];
+}
+
 export async function updateMarketLifecycle(
   marketId: string,
   updates: {
@@ -165,8 +205,9 @@ export async function updateMarketLifecycle(
     resolved: boolean;
     resolution: ResolutionOutcome | null;
     resolved_at: string | null;
+    settles_at?: string | null;
     last_ingested_at: string;
-  },
+  }
 ): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase
@@ -176,6 +217,7 @@ export async function updateMarketLifecycle(
       resolved: updates.resolved,
       resolution: updates.resolution,
       resolved_at: updates.resolved_at,
+      settles_at: updates.settles_at,
       last_ingested_at: updates.last_ingested_at,
       is_active: isMarketActive(updates.status, updates.resolved),
     })
@@ -186,14 +228,36 @@ export async function updateMarketLifecycle(
   }
 }
 
+export async function updateMarketSettlesAt(
+  marketId: string,
+  settlesAt: string,
+  lastIngestedAt: string
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('markets')
+    .update({
+      settles_at: settlesAt,
+      last_ingested_at: lastIngestedAt,
+    })
+    .eq('id', marketId);
+
+  if (error) {
+    throw new Error(`Failed to update market settles_at: ${error.message}`);
+  }
+}
+
 export async function reconcileMissingOpenMarkets(
   platform: MusashiMarket['platform'],
-  crawlStartedAtIso: string,
+  crawlStartedAtIso: string
 ): Promise<number> {
   const supabase = getSupabase();
   let totalUpdated = 0;
+  let iterations = 0;
 
-  while (true) {
+  while (iterations < MAX_ITERATIONS.DB_RECONCILIATION) {
+    iterations++;
+
     const { data: staleRows, error: selectError } = await supabase
       .from('markets')
       .select('id')
@@ -228,6 +292,12 @@ export async function reconcileMissingOpenMarkets(
     totalUpdated += ids.length;
   }
 
+  if (iterations >= MAX_ITERATIONS.DB_RECONCILIATION) {
+    throw new Error(
+      `Reconciliation exceeded maximum iterations (${MAX_ITERATIONS.DB_RECONCILIATION}). Updated ${totalUpdated} markets before stopping.`
+    );
+  }
+
   return totalUpdated;
 }
 
@@ -251,10 +321,65 @@ function toMarketRow({ market }: NormalizerResult): MarketRow {
     status: market.status,
     created_at: market.created_at,
     closes_at: market.closes_at,
+    settles_at: market.settles_at,
     resolved: market.resolved,
     resolution: market.resolution,
     resolved_at: market.resolved_at,
     last_ingested_at: market.fetched_at,
     is_active: true,
   };
+}
+
+async function fetchResolutionCandidateBatch(
+  supabase: ReturnType<typeof getSupabase>,
+  options: {
+    nowIso: string;
+    status: 'terminal' | 'open';
+    limit?: number;
+  }
+): Promise<ResolutionCandidate[]> {
+  let query = supabase
+    .from('markets')
+    .select('id, platform, platform_id, closes_at, settles_at')
+    .eq('resolved', false)
+    .or(`settles_at.lte.${options.nowIso},and(settles_at.is.null,closes_at.lte.${options.nowIso})`)
+    .order('closes_at', { ascending: true });
+
+  if (options.status === 'terminal') {
+    query = query.in('status', ['closed', 'resolved']);
+  } else {
+    query = query.eq('status', 'open');
+  }
+
+  if (options.limit !== undefined) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list ${options.status} resolution candidates: ${error.message}`);
+  }
+
+  return (data ?? []) as ResolutionCandidate[];
+}
+
+function dedupeResolutionCandidates(candidates: ResolutionCandidate[], limit?: number): ResolutionCandidate[] {
+  const seen = new Set<string>();
+  const deduped: ResolutionCandidate[] = [];
+
+  for (const candidate of candidates) {
+    if (seen.has(candidate.id)) {
+      continue;
+    }
+
+    seen.add(candidate.id);
+    deduped.push(candidate);
+
+    if (limit !== undefined && deduped.length >= limit) {
+      break;
+    }
+  }
+
+  return deduped;
 }

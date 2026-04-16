@@ -12,8 +12,6 @@ describe('required env helpers', () => {
   });
 
   it('formats a ci setup message', () => {
-    expect(formatMissingEnvMessage(['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'], 'ci')).toContain(
-      'Repository secrets',
-    );
+    expect(formatMissingEnvMessage(['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'], 'ci')).toContain('Repository secrets');
   });
 });

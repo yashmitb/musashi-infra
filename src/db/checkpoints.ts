@@ -16,9 +16,7 @@ export async function getCheckpoint(checkpointKey: string): Promise<SyncCheckpoi
   return (data as SyncCheckpoint | null) ?? null;
 }
 
-export async function upsertCheckpoint(
-  checkpoint: Omit<SyncCheckpoint, 'updated_at'>,
-): Promise<void> {
+export async function upsertCheckpoint(checkpoint: Omit<SyncCheckpoint, 'updated_at'>): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.from('sync_checkpoints').upsert(
     {
@@ -27,7 +25,7 @@ export async function upsertCheckpoint(
     },
     {
       onConflict: 'checkpoint_key',
-    },
+    }
   );
 
   if (error) {

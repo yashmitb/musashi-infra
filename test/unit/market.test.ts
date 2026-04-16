@@ -22,6 +22,7 @@ function buildValidMarket(): MusashiMarket {
     status: 'open',
     created_at: '2026-04-08T00:00:00.000Z',
     closes_at: '2026-04-08T23:59:59.000Z',
+    settles_at: '2026-04-08T23:59:59.000Z',
     resolved: false,
     resolution: null,
     resolved_at: null,

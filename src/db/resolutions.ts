@@ -72,5 +72,4 @@ export async function applyResolvedMarketState(resolutions: MarketResolution[]):
       }
     }
   }
-
 }

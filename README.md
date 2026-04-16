@@ -125,8 +125,8 @@ Use `npm run status:storage` when you want table counts and snapshot-growth prox
 If `SUPABASE_DB_HOST`, `SUPABASE_DB_NAME`, `SUPABASE_DB_USER`, and `SUPABASE_DB_PASSWORD` are set, it also reports real per-table storage size.
 It also reports prune candidates for low-value inactive Kalshi rows and legacy resolved rows that still need deactivation.
 
-Use `npm run status:resolution` when you want to see whether settled markets are being detected and how many unresolved past-close markets remain.
-It reports both the steady 5-minute resolution check and the larger backlog backfill runner.
+Use `npm run status:resolution` when you want to see whether settled markets are being detected and how much of the unresolved queue is truly overdue versus still waiting for settlement metadata.
+It reports the steady 5-minute resolution check, the larger backlog backfill runner, and the `settles_at` backfill job separately.
 
 Use `npm run status:gap` when you want to see current snapshot gap pressure and the recent health of the backfill job.
 
@@ -134,3 +134,8 @@ Use `npm run check:collection` when you want the process to fail if collection i
 
 Use `npm run job:prune-inactive-markets` to inspect low-value inactive Kalshi market rows that are eligible for deletion.
 It runs in dry-run mode by default. Set `MARKET_PRUNE_EXECUTE=true` only when you intentionally want to delete prune candidates and deactivate legacy resolved rows.
+
+Use `npm run job:archive-inactive-markets` to move low-value inactive Kalshi market rows into `markets_archive` before deleting them from the hot `markets` table.
+It also runs in dry-run mode by default. Set `MARKET_ARCHIVE_EXECUTE=true` only when you intentionally want to archive and remove those rows from the hot table.
+
+Use `npm run job:compact-inactive-markets` to archive and then compact inactive Kalshi market rows once they are older than the configured age window (24 hours by default). This keeps IDs stable for snapshots and resolutions while shrinking hot-row payloads. It also runs in dry-run mode by default. Set `MARKET_COMPACT_EXECUTE=true` only when you intentionally want to compact old inactive rows.

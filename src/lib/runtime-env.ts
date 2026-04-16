@@ -9,7 +9,7 @@ function parseEnv(text: string): Record<string, string> {
       .map((line) => {
         const index = line.indexOf('=');
         return [line.slice(0, index), line.slice(index + 1)];
-      }),
+      })
   );
 }
 

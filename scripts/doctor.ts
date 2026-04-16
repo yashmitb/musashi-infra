@@ -21,13 +21,11 @@ try {
           SUPABASE_URL: process.env.SUPABASE_URL,
           SUPABASE_SERVICE_KEY: redactSecret(process.env.SUPABASE_SERVICE_KEY ?? ''),
         },
-        optional: Object.fromEntries(
-          optionalVars.map((name) => [name, process.env[name] ?? '(default)']),
-        ),
+        optional: Object.fromEntries(optionalVars.map((name) => [name, process.env[name] ?? '(default)'])),
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

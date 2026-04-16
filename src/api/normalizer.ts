@@ -1,12 +1,7 @@
 import { parseKalshiDollars, parseKalshiSize } from '../lib/prices.js';
 import { secondsSince } from '../lib/time.js';
 import type { KalshiMarketRaw } from '../types/kalshi-raw.js';
-import type {
-  MarketCategory,
-  MarketStatus,
-  MusashiMarket,
-  ResolutionOutcome,
-} from '../types/market.js';
+import type { MarketCategory, MarketStatus, MusashiMarket, ResolutionOutcome } from '../types/market.js';
 
 export interface NormalizerResult {
   market: MusashiMarket;
@@ -58,7 +53,8 @@ export function normalizeKalshiMarket(raw: KalshiMarketRaw, fetchedAt: Date): No
       spread: deriveKalshiSpread(raw),
       status,
       created_at: raw.created_time ?? raw.open_time ?? null,
-      closes_at: raw.close_time ?? raw.latest_expiration_time ?? null,
+      closes_at: raw.close_time ?? null,
+      settles_at: raw.latest_expiration_time ?? raw.close_time ?? null,
       resolved,
       resolution,
       resolved_at: null,
@@ -134,7 +130,8 @@ function normalizeKalshiCategory(raw: KalshiMarketRaw): MarketCategory {
 
   if (seriesTicker.startsWith('kxfed') || category.includes('fed')) return 'fed_policy';
   if (category.includes('economic') || category.includes('inflation') || title.includes('cpi')) return 'economics';
-  if (category.includes('financial') || category.includes('stock') || title.includes('s&p') || title.includes('nasdaq')) return 'financial_markets';
+  if (category.includes('financial') || category.includes('stock') || title.includes('s&p') || title.includes('nasdaq'))
+    return 'financial_markets';
   if (category.includes('politic') || title.includes('election')) return 'us_politics';
   if (category.includes('geo') || title.includes('ukraine') || title.includes('china')) return 'geopolitics';
   if (category.includes('tech') || title.includes('apple') || title.includes('nvidia')) return 'technology';

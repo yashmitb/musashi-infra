@@ -10,7 +10,7 @@ export interface SnapshotCandidatePolicy {
 export function selectSnapshotCandidates(
   markets: MusashiMarket[],
   now: Date,
-  policy: SnapshotCandidatePolicy,
+  policy: SnapshotCandidatePolicy
 ): MusashiMarket[] {
   if (policy.limit <= 0) {
     return [];

@@ -103,7 +103,8 @@ export async function runGapDetection(): Promise<IngestionRunRecord> {
 
     result.kalshi_snapshots_written = snapshotResult.kalshi_written;
     result.status = result.kalshi_errors > 0 ? 'partial' : 'success';
-    result.notes = `Detected ${candidates.length} gap candidates and backfilled ${snapshotResult.total_written} snapshots` +
+    result.notes =
+      `Detected ${candidates.length} gap candidates and backfilled ${snapshotResult.total_written} snapshots` +
       (result.kalshi_errors > 0 ? ` (${result.kalshi_errors} per-market errors).` : '.');
     await updateSourceHealth({
       source: 'kalshi',

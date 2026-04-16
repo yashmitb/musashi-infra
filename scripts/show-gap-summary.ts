@@ -30,7 +30,9 @@ const activeWindowIso = new Date(Date.now() + runtime.snapshotActiveWindowHours 
 const [runsResult, gapCountResult] = await Promise.all([
   supabase
     .from('ingestion_runs')
-    .select('started_at,completed_at,status,kalshi_markets_fetched,kalshi_snapshots_written,resolutions_detected,errors')
+    .select(
+      'started_at,completed_at,status,kalshi_markets_fetched,kalshi_snapshots_written,resolutions_detected,errors'
+    )
     .eq('run_type', 'gap_detection')
     .order('started_at', { ascending: false })
     .limit(12),
@@ -40,7 +42,7 @@ const [runsResult, gapCountResult] = await Promise.all([
     .eq('is_active', true)
     .eq('resolved', false)
     .or(
-      `closes_at.lte.${activeWindowIso},volume_24h.gte.${runtime.snapshotMinVolume24h},liquidity.gte.${runtime.snapshotMinLiquidity}`,
+      `closes_at.lte.${activeWindowIso},volume_24h.gte.${runtime.snapshotMinVolume24h},liquidity.gte.${runtime.snapshotMinLiquidity}`
     )
     .or(`last_snapshot_at.is.null,last_snapshot_at.lt.${threshold}`),
 ]);
@@ -67,6 +69,6 @@ console.log(
       job_health: summarizeJobHealth(runs),
     },
     null,
-    2,
-  ),
+    2
+  )
 );

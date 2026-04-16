@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  KalshiClient,
-  KalshiPaginationBudgetError,
-  KalshiPaginationCursorError,
-} from '../api/kalshi-client.js';
+import { KalshiClient, KalshiPaginationBudgetError, KalshiPaginationCursorError } from '../api/kalshi-client.js';
 import { normalizeKalshiBatch } from '../api/normalizer.js';
 import { getEnv } from '../lib/env.js';
 import { selectSnapshotCandidates } from '../lib/snapshot-policy.js';
@@ -72,7 +68,7 @@ export async function runFullSync(): Promise<IngestionRunRecord> {
 
     if (runPageBudget <= 0) {
       throw new KalshiPaginationBudgetError(
-        `Kalshi crawl reached the configured absolute page cap of ${env.fullSyncAbsoluteMaxPages}`,
+        `Kalshi crawl reached the configured absolute page cap of ${env.fullSyncAbsoluteMaxPages}`
       );
     }
 
@@ -109,7 +105,7 @@ export async function runFullSync(): Promise<IngestionRunRecord> {
           activeWindowHours: env.snapshotActiveWindowHours,
           minVolume24h: env.snapshotMinVolume24h,
           minLiquidity: env.snapshotMinLiquidity,
-        },
+        }
       );
       snapshotCandidates.push(...pageSnapshotCandidates);
 

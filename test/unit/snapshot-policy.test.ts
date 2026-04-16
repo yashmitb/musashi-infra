@@ -23,6 +23,7 @@ function buildMarket(overrides: Partial<MusashiMarket> = {}): MusashiMarket {
     status: 'open',
     created_at: '2026-04-10T00:00:00Z',
     closes_at: '2026-04-10T12:00:00Z',
+    settles_at: '2026-04-10T12:00:00Z',
     resolved: false,
     resolution: null,
     resolved_at: null,
@@ -35,16 +36,12 @@ function buildMarket(overrides: Partial<MusashiMarket> = {}): MusashiMarket {
 
 describe('selectSnapshotCandidates', () => {
   it('keeps markets closing soon even with low activity', () => {
-    const result = selectSnapshotCandidates(
-      [buildMarket()],
-      new Date('2026-04-10T00:00:00Z'),
-      {
-        limit: 10,
-        activeWindowHours: 24,
-        minVolume24h: 1000,
-        minLiquidity: 1000,
-      },
-    );
+    const result = selectSnapshotCandidates([buildMarket()], new Date('2026-04-10T00:00:00Z'), {
+      limit: 10,
+      activeWindowHours: 24,
+      minVolume24h: 1000,
+      minLiquidity: 1000,
+    });
 
     expect(result).toHaveLength(1);
   });
@@ -64,7 +61,7 @@ describe('selectSnapshotCandidates', () => {
         activeWindowHours: 24,
         minVolume24h: 1000,
         minLiquidity: 1000,
-      },
+      }
     );
 
     expect(result.map((market) => market.id)).toEqual(['active']);
@@ -86,7 +83,7 @@ describe('selectSnapshotCandidates', () => {
         activeWindowHours: 24,
         minVolume24h: 1000,
         minLiquidity: 1000,
-      },
+      }
     );
 
     expect(result).toEqual([]);
@@ -104,7 +101,7 @@ describe('selectSnapshotCandidates', () => {
         activeWindowHours: 24,
         minVolume24h: 1000,
         minLiquidity: 1000,
-      },
+      }
     );
 
     expect(result.map((market) => market.id)).toEqual(['sooner']);

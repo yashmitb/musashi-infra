@@ -61,7 +61,10 @@ export function evaluateCollectionHealth(input: CollectionHealthInput): Collecti
   if (input.latestRun === null) {
     reasons.push('No full_sync ingestion runs found');
   } else {
-    if (input.latestRun.completed_at === null && minutesSince(input.latestRun.started_at, input.now) > input.runMaxAgeMinutes) {
+    if (
+      input.latestRun.completed_at === null &&
+      minutesSince(input.latestRun.started_at, input.now) > input.runMaxAgeMinutes
+    ) {
       reasons.push(`Latest full_sync run has been running for more than ${input.runMaxAgeMinutes} minutes`);
     }
 

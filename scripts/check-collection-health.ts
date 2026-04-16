@@ -73,8 +73,8 @@ console.log(
       latest_run: runsResult.data,
     },
     null,
-    2,
-  ),
+    2
+  )
 );
 
 if (!result.healthy) {

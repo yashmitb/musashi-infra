@@ -51,7 +51,7 @@ export function summarizeCrawlProgress(input: CrawlProgressInput): CrawlProgress
       run.duration_ms !== null &&
       run.duration_ms > 0 &&
       run.status !== 'failed' &&
-      run.error_types.every((errorType) => errorType === 'page_budget_exhausted'),
+      run.error_types.every((errorType) => errorType === 'page_budget_exhausted')
   );
 
   const totalDurationMs = completedRuns.reduce((sum, run) => sum + (run.duration_ms ?? 0), 0);
@@ -78,12 +78,9 @@ export function summarizeCrawlProgress(input: CrawlProgressInput): CrawlProgress
       total_markets_new: totalMarketsNew,
       total_snapshots_written: totalSnapshotsWritten,
       total_duration_minutes: totalDurationMinutes,
-      avg_markets_per_minute:
-        totalDurationMinutes > 0 ? round(totalMarketsNew / totalDurationMinutes) : null,
-      avg_snapshots_per_minute:
-        totalDurationMinutes > 0 ? round(totalSnapshotsWritten / totalDurationMinutes) : null,
-      avg_markets_per_run:
-        completedRuns.length > 0 ? round(totalMarketsNew / completedRuns.length) : null,
+      avg_markets_per_minute: totalDurationMinutes > 0 ? round(totalMarketsNew / totalDurationMinutes) : null,
+      avg_snapshots_per_minute: totalDurationMinutes > 0 ? round(totalSnapshotsWritten / totalDurationMinutes) : null,
+      avg_markets_per_run: completedRuns.length > 0 ? round(totalMarketsNew / completedRuns.length) : null,
     },
   };
 }

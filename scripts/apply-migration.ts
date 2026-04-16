@@ -1,5 +1,5 @@
-import { readdir, readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
+import { readdir, readFile } from 'node:fs/promises';
 import postgres from 'postgres';
 
 const host = process.env.SUPABASE_DB_HOST;
@@ -58,7 +58,7 @@ try {
       }
     }
 
-    const migrationPath = new URL(`../supabase/migrations/${entry}`, import.meta.url);
+    const migrationPath = new URL(`../supabase/migrations/${basename(entry)}`, import.meta.url);
     const migration = await readFile(migrationPath, 'utf8');
     await sql.begin(async (tx) => {
       await tx.unsafe(migration);

@@ -7,6 +7,30 @@ import type {
   KalshiMarketsResponse,
 } from '../types/kalshi-raw.js';
 
+// Global rate limiter singleton to coordinate across all KalshiClient instances
+class GlobalRateLimiter {
+  private lastRequestStartedAt = 0;
+  private readonly rateLimitMs: number;
+
+  constructor(rateLimitMs: number) {
+    this.rateLimitMs = rateLimitMs;
+  }
+
+  async wait(): Promise<void> {
+    const elapsed = Date.now() - this.lastRequestStartedAt;
+    const remaining = this.rateLimitMs - elapsed;
+
+    if (remaining > 0) {
+      await sleep(remaining);
+    }
+
+    this.lastRequestStartedAt = Date.now();
+  }
+}
+
+// Singleton instance for Kalshi API rate limiting (110ms between requests = ~9 req/sec)
+const globalKalshiRateLimiter = new GlobalRateLimiter(110);
+
 export interface KalshiClientOptions {
   baseUrl?: string;
   timeoutMs?: number;
@@ -41,16 +65,16 @@ export class KalshiClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
-  private readonly rateLimitMs: number;
   private readonly fetchImpl: typeof fetch;
-  private lastRequestStartedAt = 0;
 
   constructor(options: KalshiClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? 'https://api.elections.kalshi.com/trade-api/v2';
     this.timeoutMs = options.timeoutMs ?? 8000;
     this.maxRetries = options.maxRetries ?? 3;
-    this.rateLimitMs = options.rateLimitMs ?? 110;
     this.fetchImpl = options.fetchImpl ?? fetch;
+
+    // Note: rateLimitMs option is ignored; we use the global rate limiter instead
+    // This ensures proper rate limiting across all client instances
   }
 
   async fetchAllMarkets(): Promise<FetchAllMarketsResult> {
@@ -204,7 +228,8 @@ export class KalshiClient {
   }
 
   private async fetchJson<T>(path: string): Promise<T> {
-    await this.waitForRateLimit();
+    // Use global rate limiter to coordinate across all instances
+    await globalKalshiRateLimiter.wait();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -212,7 +237,6 @@ export class KalshiClient {
     }, this.timeoutMs);
 
     try {
-      this.lastRequestStartedAt = Date.now();
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method: 'GET',
         signal: controller.signal,
@@ -240,22 +264,13 @@ export class KalshiClient {
       clearTimeout(timeoutId);
     }
   }
-
-  private async waitForRateLimit(): Promise<void> {
-    const elapsed = Date.now() - this.lastRequestStartedAt;
-    const remaining = this.rateLimitMs - elapsed;
-
-    if (remaining > 0) {
-      await sleep(remaining);
-    }
-  }
 }
 
 export class KalshiHttpError extends Error {
   constructor(
     public readonly status: number,
     message: string,
-    public readonly path: string,
+    public readonly path: string
   ) {
     super(message);
     this.name = 'KalshiHttpError';

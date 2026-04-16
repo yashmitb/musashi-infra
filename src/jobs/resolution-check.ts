@@ -70,7 +70,7 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
     const processedCandidates = await mapWithConcurrency(
       kalshiCandidates,
       fetchConcurrency,
-      async (candidate, index) => {
+      async (candidate, _index) => {
         const client = new KalshiClient({
           baseUrl: env.kalshiBaseUrl,
           rateLimitMs: workerRateLimitMs,
@@ -117,9 +117,13 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
               ? {
                   marketId: candidate.id,
                   status: lifecycleStatus,
-                  resolved: false,
+                  resolved: lifecycleStatus === 'resolved',
                   resolution: null,
-                  resolved_at: null,
+                  resolved_at:
+                    lifecycleStatus === 'resolved'
+                      ? (raw.latest_expiration_time ?? raw.close_time ?? startedAtIso)
+                      : null,
+                  settles_at: raw.latest_expiration_time ?? raw.close_time ?? candidate.settles_at,
                   last_ingested_at: startedAtIso,
                 }
               : null;
@@ -174,13 +178,13 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
             error: runError,
           };
         }
-      },
+      }
     );
 
     result.kalshi_markets_fetched = kalshiCandidates.length;
     const pendingResolutions = processedCandidates.flatMap((item) => (item.resolution ? [item.resolution] : []));
     const lifecycleUpdates = processedCandidates.flatMap((item) =>
-      item.lifecycleUpdate ? [item.lifecycleUpdate] : [],
+      item.lifecycleUpdate ? [item.lifecycleUpdate] : []
     );
 
     for (const lifecycleUpdate of lifecycleUpdates) {
@@ -191,7 +195,8 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
     result.resolutions_detected = insertedCount;
 
     result.status = result.kalshi_errors > 0 ? 'partial' : 'success';
-    result.notes = `Checked ${result.kalshi_markets_fetched} Kalshi markets and detected ${result.resolutions_detected} resolutions` +
+    result.notes =
+      `Checked ${result.kalshi_markets_fetched} Kalshi markets and detected ${result.resolutions_detected} resolutions` +
       (result.kalshi_errors > 0 ? ` (${result.kalshi_errors} per-market errors).` : '.');
     await updateSourceHealth({
       source: 'kalshi',

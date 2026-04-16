@@ -1,7 +1,9 @@
 import type { IngestionRunRecord } from '../types/storage.js';
 import { getSupabase } from './supabase.js';
 
-export async function startRun(input: Pick<IngestionRunRecord, 'job_id' | 'run_type' | 'started_at' | 'status'>): Promise<void> {
+export async function startRun(
+  input: Pick<IngestionRunRecord, 'job_id' | 'run_type' | 'started_at' | 'status'>
+): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.from('ingestion_runs').insert(input);
 
@@ -75,7 +77,7 @@ export async function updateRunProgress(
       | 'status'
       | 'notes'
     >
-  >,
+  >
 ): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.from('ingestion_runs').update(updates).eq('job_id', jobId);

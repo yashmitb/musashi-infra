@@ -5,7 +5,7 @@ export async function bootstrapScriptEnv(
   requiredNames: string[],
   options?: {
     envFileUrl?: URL;
-  },
+  }
 ): Promise<void> {
   const envFileUrl = options?.envFileUrl ?? new URL('../../.env', import.meta.url);
   const runtimeEnv = await loadRuntimeEnv(envFileUrl);

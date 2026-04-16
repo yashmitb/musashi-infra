@@ -32,7 +32,7 @@ interface SnapshotRow {
 export async function writeSnapshots(
   markets: MusashiMarket[],
   snapshotTime: Date,
-  options: SnapshotWriteOptions,
+  options: SnapshotWriteOptions
 ): Promise<SnapshotWriteResult> {
   if (markets.length === 0) {
     return {
@@ -94,7 +94,9 @@ export async function writeSnapshots(
       .in('id', idChunk);
 
     if (marketsError) {
-      throw new Error(`Failed to update market last_snapshot_at: ${marketsError.message || JSON.stringify(marketsError)}`);
+      throw new Error(
+        `Failed to update market last_snapshot_at: ${marketsError.message || JSON.stringify(marketsError)}`
+      );
     }
   }
 

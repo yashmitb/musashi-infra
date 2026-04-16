@@ -29,7 +29,8 @@
     "status:storage": "tsx scripts/show-storage-summary.ts",
     "status:resolution": "tsx scripts/show-resolution-summary.ts",
     "status:gap": "tsx scripts/show-gap-summary.ts",
-    "check:collection": "tsx scripts/check-collection-health.ts"
+    "check:collection": "tsx scripts/check-collection-health.ts",
+    "event:show": "tsx scripts/show-event-intelligence.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",

@@ -38,12 +38,24 @@ export function evaluateCollectionHealth(input: CollectionHealthInput): Collecti
     input.latestRun.completed_at !== null &&
     input.latestRun.status === 'success' &&
     input.latestRun.error_types.length === 0;
+  const latestRunBudgetBounded =
+    input.latestRun !== null &&
+    input.latestRun.completed_at !== null &&
+    (input.latestRun.status === 'success' || input.latestRun.status === 'partial') &&
+    input.latestRun.error_types.every((errorType) => ['page_budget_exhausted'].includes(errorType));
+  const sourceFetchFresh =
+    input.sourceHealth?.last_successful_fetch !== null &&
+    input.sourceHealth?.last_successful_fetch !== undefined &&
+    minutesSince(input.sourceHealth.last_successful_fetch, input.now) <= input.stallMaxMinutes;
 
   if (input.checkpoint === null) {
     if (!latestRunCompletedSuccessfully) {
       reasons.push('Missing kalshi_full_sync checkpoint');
     }
-  } else if (minutesSince(input.checkpoint.updated_at, input.now) > input.stallMaxMinutes) {
+  } else if (
+    minutesSince(input.checkpoint.updated_at, input.now) > input.stallMaxMinutes &&
+    !(latestRunBudgetBounded && sourceFetchFresh)
+  ) {
     reasons.push(`Checkpoint stale for more than ${input.stallMaxMinutes} minutes`);
   }
 

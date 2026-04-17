@@ -41,6 +41,7 @@ function makeSupabaseMock(batches: { terminal: CandidateRow[]; open: CandidateRo
 
         return builder;
       }),
+      is: vi.fn(() => builder),
       or: vi.fn(() => builder),
       in: vi.fn((column: string, values: string[]) => {
         if (column === 'status' && values.includes('closed') && values.includes('resolved')) {

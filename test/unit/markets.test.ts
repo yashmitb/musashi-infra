@@ -30,6 +30,7 @@ function makeSupabaseMock(batches: { terminal: CandidateRow[]; open: CandidateRo
     const state: {
       limit?: number;
       statusBucket?: 'terminal' | 'open';
+      dueBucket?: 'settles' | 'closes';
     } = {};
 
     const builder = {
@@ -41,7 +42,13 @@ function makeSupabaseMock(batches: { terminal: CandidateRow[]; open: CandidateRo
 
         return builder;
       }),
-      is: vi.fn(() => builder),
+      is: vi.fn((column: string, value: unknown) => {
+        if (column === 'settles_at' && value === null) {
+          state.dueBucket = 'closes';
+        }
+
+        return builder;
+      }),
       or: vi.fn(() => builder),
       in: vi.fn((column: string, values: string[]) => {
         if (column === 'status' && values.includes('closed') && values.includes('resolved')) {
@@ -50,7 +57,13 @@ function makeSupabaseMock(batches: { terminal: CandidateRow[]; open: CandidateRo
 
         return builder;
       }),
-      not: vi.fn(() => builder),
+      not: vi.fn((column: string, operator: string, value?: unknown) => {
+        if (column === 'settles_at' && operator === 'is' && value === null) {
+          state.dueBucket = 'settles';
+        }
+
+        return builder;
+      }),
       lte: vi.fn(() => builder),
       order: vi.fn(() => builder),
       limit: vi.fn((value: number) => {
@@ -59,7 +72,8 @@ function makeSupabaseMock(batches: { terminal: CandidateRow[]; open: CandidateRo
       }),
       then: (onFulfilled: (value: { data: CandidateRow[]; error: null }) => unknown) => {
         const source = state.statusBucket === 'open' ? batches.open : batches.terminal;
-        const data = state.limit === undefined ? source : source.slice(0, state.limit);
+        const scopedSource = state.dueBucket === 'closes' ? [] : source;
+        const data = state.limit === undefined ? scopedSource : scopedSource.slice(0, state.limit);
         return Promise.resolve(onFulfilled({ data, error: null }));
       },
     };

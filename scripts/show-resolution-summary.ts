@@ -77,6 +77,7 @@ async function loadResolutionSummary(): Promise<{
   closed_waiting_settlement_count: number | null;
   missing_settles_at_backfill_count: number | null;
   open_past_close_unresolved_count: number | null;
+  source_missing_unresolved_count: number | null;
   total_resolutions: number | null;
 }> {
   if (env.SUPABASE_DB_HOST && env.SUPABASE_DB_NAME && env.SUPABASE_DB_USER && env.SUPABASE_DB_PASSWORD) {
@@ -90,6 +91,7 @@ async function loadResolutionSummary(): Promise<{
     closedWaitingSettlementResult,
     missingSettlesAtResult,
     openPastCloseResult,
+    sourceMissingResult,
     resolutionCountResult,
   ] = await Promise.all([
     supabase
@@ -123,6 +125,12 @@ async function loadResolutionSummary(): Promise<{
       .eq('status', 'open')
       .not('closes_at', 'is', null)
       .lte('closes_at', nowIso),
+    supabase
+      .from('markets')
+      .select('id', { count: 'estimated', head: true })
+      .eq('platform', 'kalshi')
+      .eq('resolved', false)
+      .not('source_missing_at', 'is', null),
     supabase.from('market_resolutions').select('id', { count: 'estimated', head: true }),
   ]);
 
@@ -131,6 +139,7 @@ async function loadResolutionSummary(): Promise<{
     closed_waiting_settlement_count: closedWaitingSettlementResult.count,
     missing_settles_at_backfill_count: missingSettlesAtResult.count,
     open_past_close_unresolved_count: openPastCloseResult.count,
+    source_missing_unresolved_count: sourceMissingResult.count,
     total_resolutions: resolutionCountResult.count,
   };
 }
@@ -140,6 +149,7 @@ async function loadResolutionSummaryFromDb(): Promise<{
   closed_waiting_settlement_count: number;
   missing_settles_at_backfill_count: number;
   open_past_close_unresolved_count: number;
+  source_missing_unresolved_count: number;
   total_resolutions: number;
 }> {
   if (!env.SUPABASE_DB_HOST || !env.SUPABASE_DB_NAME || !env.SUPABASE_DB_USER || !env.SUPABASE_DB_PASSWORD) {
@@ -163,6 +173,7 @@ async function loadResolutionSummaryFromDb(): Promise<{
         closed_waiting_settlement_count: string;
         missing_settles_at_backfill_count: string;
         open_past_close_unresolved_count: string;
+        source_missing_unresolved_count: string;
         total_resolutions: string;
       }[]
     >`
@@ -198,6 +209,11 @@ async function loadResolutionSummaryFromDb(): Promise<{
             and closes_at is not null
             and closes_at <= now()) as open_past_close_unresolved_count,
         (select count(*)::bigint
+           from markets
+          where platform = 'kalshi'
+            and resolved = false
+            and source_missing_at is not null) as source_missing_unresolved_count,
+        (select count(*)::bigint
            from market_resolutions) as total_resolutions
     `;
 
@@ -206,6 +222,7 @@ async function loadResolutionSummaryFromDb(): Promise<{
       closed_waiting_settlement_count: Number(row?.closed_waiting_settlement_count ?? 0),
       missing_settles_at_backfill_count: Number(row?.missing_settles_at_backfill_count ?? 0),
       open_past_close_unresolved_count: Number(row?.open_past_close_unresolved_count ?? 0),
+      source_missing_unresolved_count: Number(row?.source_missing_unresolved_count ?? 0),
       total_resolutions: Number(row?.total_resolutions ?? 0),
     };
   } finally {

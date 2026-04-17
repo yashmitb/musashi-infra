@@ -58,6 +58,7 @@ interface MarketRow {
   resolved: boolean;
   resolution: MusashiMarket['resolution'];
   resolved_at: string | null;
+  source_missing_at: string | null;
   last_ingested_at: string;
   is_active: boolean;
 }
@@ -180,6 +181,7 @@ export async function listSettlesAtBackfillCandidates(
     .eq('resolved', false)
     .eq('is_active', false)
     .eq('status', 'closed')
+    .is('source_missing_at', null)
     .is('settles_at', null)
     .not('closes_at', 'is', null)
     .lte('closes_at', now.toISOString())
@@ -244,6 +246,30 @@ export async function updateMarketSettlesAt(
 
   if (error) {
     throw new Error(`Failed to update market settles_at: ${error.message}`);
+  }
+}
+
+export async function markMarketSourceMissing(
+  marketId: string,
+  missingAt: string,
+  fallbackSettlesAt?: string | null
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('markets')
+    .update({
+      status: 'closed',
+      resolved: false,
+      resolution: null,
+      source_missing_at: missingAt,
+      settles_at: fallbackSettlesAt ?? null,
+      last_ingested_at: missingAt,
+      is_active: false,
+    })
+    .eq('id', marketId);
+
+  if (error) {
+    throw new Error(`Failed to mark market source_missing_at: ${error.message}`);
   }
 }
 
@@ -325,6 +351,7 @@ function toMarketRow({ market }: NormalizerResult): MarketRow {
     resolved: market.resolved,
     resolution: market.resolution,
     resolved_at: market.resolved_at,
+    source_missing_at: null,
     last_ingested_at: market.fetched_at,
     is_active: true,
   };
@@ -338,30 +365,61 @@ async function fetchResolutionCandidateBatch(
     limit?: number;
   }
 ): Promise<ResolutionCandidate[]> {
-  let query = supabase
-    .from('markets')
-    .select('id, platform, platform_id, closes_at, settles_at')
-    .eq('resolved', false)
-    .or(`settles_at.lte.${options.nowIso},and(settles_at.is.null,closes_at.lte.${options.nowIso})`)
-    .order('closes_at', { ascending: true });
+  const statusScopedQuery = () => {
+    const baseQuery = supabase
+      .from('markets')
+      .select('id, platform, platform_id, closes_at, settles_at')
+      .eq('resolved', false)
+      .is('source_missing_at', null);
 
-  if (options.status === 'terminal') {
-    query = query.in('status', ['closed', 'resolved']);
-  } else {
-    query = query.eq('status', 'open');
-  }
+    if (options.status === 'terminal') {
+      return baseQuery.in('status', ['closed', 'resolved']);
+    }
+
+    return baseQuery.eq('status', 'open');
+  };
+
+  const dueBySettlementQuery = statusScopedQuery()
+    .not('settles_at', 'is', null)
+    .lte('settles_at', options.nowIso)
+    .order('settles_at', { ascending: true });
 
   if (options.limit !== undefined) {
-    query = query.limit(options.limit);
+    dueBySettlementQuery.limit(options.limit);
   }
 
-  const { data, error } = await query;
+  const { data: dueBySettlement, error: dueBySettlementError } = await dueBySettlementQuery;
 
-  if (error) {
-    throw new Error(`Failed to list ${options.status} resolution candidates: ${error.message}`);
+  if (dueBySettlementError) {
+    throw new Error(`Failed to list ${options.status} resolution candidates: ${dueBySettlementError.message}`);
   }
 
-  return (data ?? []) as ResolutionCandidate[];
+  const settlementCandidates = (dueBySettlement ?? []) as ResolutionCandidate[];
+  if (options.limit !== undefined && settlementCandidates.length >= options.limit) {
+    return settlementCandidates.slice(0, options.limit);
+  }
+
+  const remainingLimit =
+    options.limit === undefined ? undefined : Math.max(options.limit - settlementCandidates.length, 0);
+  const dueByCloseQuery = statusScopedQuery()
+    .is('settles_at', null)
+    .not('closes_at', 'is', null)
+    .lte('closes_at', options.nowIso)
+    .order('closes_at', { ascending: true });
+
+  if (remainingLimit !== undefined) {
+    dueByCloseQuery.limit(remainingLimit);
+  }
+
+  const { data: dueByClose, error: dueByCloseError } = await dueByCloseQuery;
+
+  if (dueByCloseError) {
+    throw new Error(`Failed to list ${options.status} resolution candidates: ${dueByCloseError.message}`);
+  }
+
+  return [...settlementCandidates, ...((dueByClose ?? []) as ResolutionCandidate[])].sort((left, right) =>
+    getResolutionDueTime(left).localeCompare(getResolutionDueTime(right))
+  );
 }
 
 function dedupeResolutionCandidates(candidates: ResolutionCandidate[], limit?: number): ResolutionCandidate[] {
@@ -382,4 +440,8 @@ function dedupeResolutionCandidates(candidates: ResolutionCandidate[], limit?: n
   }
 
   return deduped;
+}
+
+function getResolutionDueTime(candidate: ResolutionCandidate): string {
+  return candidate.settles_at ?? candidate.closes_at ?? '9999-12-31T23:59:59.999Z';
 }

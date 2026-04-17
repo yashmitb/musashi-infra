@@ -6,6 +6,7 @@ vi.mock('../../src/api/kalshi-client.js', () => ({
 
 vi.mock('../../src/db/markets.js', () => ({
   listSettlesAtBackfillCandidates: vi.fn(),
+  markMarketSourceMissing: vi.fn(),
   updateMarketSettlesAt: vi.fn(),
 }));
 
@@ -29,12 +30,17 @@ vi.mock('../../src/lib/env.js', () => ({
 
 import { KalshiClient } from '../../src/api/kalshi-client.js';
 import { completeRun, failOpenRuns, startRun } from '../../src/db/ingestion-log.js';
-import { listSettlesAtBackfillCandidates, updateMarketSettlesAt } from '../../src/db/markets.js';
+import {
+  listSettlesAtBackfillCandidates,
+  markMarketSourceMissing,
+  updateMarketSettlesAt,
+} from '../../src/db/markets.js';
 import { backfillSettlesAt, runSettlesAtBackfill } from '../../src/jobs/settles-at-backfill.js';
 
 const mockFetchMarket = vi.fn();
 const MockKalshiClient = vi.mocked(KalshiClient);
 const mockListCandidates = vi.mocked(listSettlesAtBackfillCandidates);
+const mockMarkMarketSourceMissing = vi.mocked(markMarketSourceMissing);
 const mockUpdateMarketSettlesAt = vi.mocked(updateMarketSettlesAt);
 const mockFailOpenRuns = vi.mocked(failOpenRuns);
 const mockStartRun = vi.mocked(startRun);
@@ -83,6 +89,19 @@ describe('runSettlesAtBackfill', () => {
     expect(result.kalshi_errors).toBe(1);
     expect(result.kalshi_markets_new).toBe(1);
     expect(result.errors[0]?.error_type).toBe('settles_at_backfill_market_failed');
+  });
+
+  it('marks upstream-missing markets instead of retrying them forever', async () => {
+    mockListCandidates.mockResolvedValue([makeCandidate()]);
+    mockFetchMarket.mockResolvedValue(null);
+
+    const result = await runSettlesAtBackfill();
+
+    expect(result.status).toBe('success');
+    expect(result.kalshi_markets_fetched).toBe(1);
+    expect(result.kalshi_markets_new).toBe(0);
+    expect(mockMarkMarketSourceMissing).toHaveBeenCalledWith('market-1', expect.any(String), '2026-01-01T00:00:00Z');
+    expect(mockUpdateMarketSettlesAt).not.toHaveBeenCalled();
   });
 });
 

@@ -6,6 +6,7 @@ vi.mock('../../src/api/kalshi-client.js', () => ({
 
 vi.mock('../../src/db/markets.js', () => ({
   listResolutionCandidates: vi.fn(),
+  markMarketSourceMissing: vi.fn(),
   updateMarketLifecycle: vi.fn(),
 }));
 
@@ -37,7 +38,7 @@ vi.mock('../../src/lib/env.js', () => ({
 
 import { KalshiClient } from '../../src/api/kalshi-client.js';
 import { completeRun, failOpenRuns, startRun } from '../../src/db/ingestion-log.js';
-import { listResolutionCandidates, updateMarketLifecycle } from '../../src/db/markets.js';
+import { listResolutionCandidates, markMarketSourceMissing, updateMarketLifecycle } from '../../src/db/markets.js';
 import { applyResolvedMarketState, insertResolutions } from '../../src/db/resolutions.js';
 import { updateSourceHealth } from '../../src/db/source-health.js';
 import { runResolutionCheck } from '../../src/jobs/resolution-check.js';
@@ -45,6 +46,7 @@ import { runResolutionCheck } from '../../src/jobs/resolution-check.js';
 const mockFetchMarket = vi.fn();
 const MockKalshiClient = vi.mocked(KalshiClient);
 const mockListCandidates = vi.mocked(listResolutionCandidates);
+const mockMarkMarketSourceMissing = vi.mocked(markMarketSourceMissing);
 const mockUpdateMarketLifecycle = vi.mocked(updateMarketLifecycle);
 const mockInsertResolutions = vi.mocked(insertResolutions);
 const mockApplyResolvedMarketState = vi.mocked(applyResolvedMarketState);
@@ -122,6 +124,19 @@ describe('runResolutionCheck', () => {
         resolution: null,
       })
     );
+  });
+
+  it('marks upstream-missing markets and skips resolution insertion', async () => {
+    mockListCandidates.mockResolvedValue([makeCandidate()]);
+    mockFetchMarket.mockResolvedValue(null);
+
+    const result = await runResolutionCheck();
+
+    expect(result.status).toBe('success');
+    expect(result.resolutions_detected).toBe(0);
+    expect(mockMarkMarketSourceMissing).toHaveBeenCalledWith('market-1', expect.any(String), '2026-01-01T00:00:00Z');
+    expect(mockInsertResolutions).toHaveBeenCalledWith([]);
+    expect(mockUpdateMarketLifecycle).not.toHaveBeenCalled();
   });
 
   it('records a per-market error and continues processing remaining markets', async () => {

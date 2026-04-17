@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { KalshiClient } from '../api/kalshi-client.js';
 import { failOpenRuns, startRun, completeRun, updateRunProgress } from '../db/ingestion-log.js';
-import { listResolutionCandidates, updateMarketLifecycle } from '../db/markets.js';
+import { listResolutionCandidates, markMarketSourceMissing, updateMarketLifecycle } from '../db/markets.js';
 import { applyResolvedMarketState, insertResolutions } from '../db/resolutions.js';
 import { updateSourceHealth } from '../db/source-health.js';
 import { mapWithConcurrency } from '../lib/collections.js';
@@ -84,6 +84,8 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
               candidate,
               resolution: null,
               lifecycleUpdate: null,
+              sourceMissingAt: startedAtIso,
+              sourceMissingFallbackSettlesAt: candidate.settles_at ?? candidate.closes_at,
               error: null,
             };
           }
@@ -146,6 +148,8 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
             candidate,
             resolution,
             lifecycleUpdate,
+            sourceMissingAt: null,
+            sourceMissingFallbackSettlesAt: null,
             error: null,
           };
         } catch (error) {
@@ -175,6 +179,8 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
             candidate,
             resolution: null,
             lifecycleUpdate: null,
+            sourceMissingAt: null,
+            sourceMissingFallbackSettlesAt: null,
             error: runError,
           };
         }
@@ -186,9 +192,27 @@ export async function runResolutionCheck(options: ResolutionCheckOptions = {}): 
     const lifecycleUpdates = processedCandidates.flatMap((item) =>
       item.lifecycleUpdate ? [item.lifecycleUpdate] : []
     );
+    const sourceMissingUpdates = processedCandidates.flatMap((item) =>
+      item.sourceMissingAt
+        ? [
+            {
+              marketId: item.candidate.id,
+              missingAt: item.sourceMissingAt,
+              fallbackSettlesAt: item.sourceMissingFallbackSettlesAt,
+            },
+          ]
+        : []
+    );
 
     for (const lifecycleUpdate of lifecycleUpdates) {
       await updateMarketLifecycle(lifecycleUpdate.marketId, lifecycleUpdate);
+    }
+    for (const sourceMissingUpdate of sourceMissingUpdates) {
+      await markMarketSourceMissing(
+        sourceMissingUpdate.marketId,
+        sourceMissingUpdate.missingAt,
+        sourceMissingUpdate.fallbackSettlesAt
+      );
     }
     const insertedCount = await insertResolutions(pendingResolutions);
     await applyResolvedMarketState(pendingResolutions);

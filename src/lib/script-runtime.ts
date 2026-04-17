@@ -11,9 +11,7 @@ export async function bootstrapScriptEnv(
   const runtimeEnv = await loadRuntimeEnv(envFileUrl);
 
   for (const [key, value] of Object.entries(runtimeEnv)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
+    process.env[key] ??= value;
   }
 
   const missing = findMissingEnv(requiredNames);

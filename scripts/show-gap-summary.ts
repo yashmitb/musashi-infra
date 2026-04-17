@@ -10,9 +10,7 @@ if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) {
 }
 
 for (const [key, value] of Object.entries(env)) {
-  if (process.env[key] === undefined) {
-    process.env[key] = value;
-  }
+  process.env[key] ??= value;
 }
 
 const runtime = getEnv();

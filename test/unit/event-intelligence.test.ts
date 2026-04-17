@@ -48,11 +48,7 @@ function buildMarket(overrides: Partial<MusashiMarket> = {}): MusashiMarket {
   };
 }
 
-function buildSnapshot(
-  marketId: string,
-  snapshotTime: string,
-  yesPrice: number,
-): MarketSnapshot {
+function buildSnapshot(marketId: string, snapshotTime: string, yesPrice: number): MarketSnapshot {
   return {
     market_id: marketId,
     snapshot_time: snapshotTime,
@@ -107,10 +103,7 @@ describe('computeProbabilityChange', () => {
 
   it('computes 24h change correctly (negative move)', () => {
     const id = 'musashi-kalshi-m99';
-    const snapshots = [
-      buildSnapshot(id, '2026-04-13T12:00:00Z', 0.7),
-      buildSnapshot(id, '2026-04-14T12:00:00Z', 0.55),
-    ];
+    const snapshots = [buildSnapshot(id, '2026-04-13T12:00:00Z', 0.7), buildSnapshot(id, '2026-04-14T12:00:00Z', 0.55)];
     const result = computeProbabilityChange(id, snapshots, 24);
     expect(result).not.toBeNull();
     expect(result!).toBeCloseTo(-0.15);
@@ -119,9 +112,9 @@ describe('computeProbabilityChange', () => {
   it('computes 7d change correctly', () => {
     const id = 'musashi-kalshi-m99';
     const snapshots = [
-      buildSnapshot(id, '2026-04-07T00:00:00Z', 0.4),  // ~7d ago
+      buildSnapshot(id, '2026-04-07T00:00:00Z', 0.4), // ~7d ago
       buildSnapshot(id, '2026-04-10T00:00:00Z', 0.45), // intermediate
-      buildSnapshot(id, '2026-04-14T00:00:00Z', 0.6),  // current
+      buildSnapshot(id, '2026-04-14T00:00:00Z', 0.6), // current
     ];
     const result = computeProbabilityChange(id, snapshots, 7 * 24);
     expect(result).not.toBeNull();
@@ -129,18 +122,16 @@ describe('computeProbabilityChange', () => {
     expect(result!).toBeCloseTo(0.2);
   });
 
-  it('picks the snapshot closest to the target look-back time', () => {
+  it('returns null when no snapshot falls within the 50% proximity window', () => {
     const id = 'musashi-kalshi-m99';
-    // Target is 24h before the latest; April 10 is closer to April 13 than April 7
+    // Latest is April 14; target for 24h is April 13.
+    // April 10 is 72h from April 13 — well outside the 12h (50% of 24h) tolerance.
     const snapshots = [
-      buildSnapshot(id, '2026-04-07T00:00:00Z', 0.3), // 7d ago
-      buildSnapshot(id, '2026-04-10T00:00:00Z', 0.4), // 4d ago — closest to 24h target relative to April 11
-      buildSnapshot(id, '2026-04-14T00:00:00Z', 0.6), // current
+      buildSnapshot(id, '2026-04-07T00:00:00Z', 0.3),
+      buildSnapshot(id, '2026-04-10T00:00:00Z', 0.4),
+      buildSnapshot(id, '2026-04-14T00:00:00Z', 0.6),
     ];
-    // 24h before April 14 = April 13. Closest snapshot to April 13 is April 10
-    const result = computeProbabilityChange(id, snapshots, 24);
-    expect(result).not.toBeNull();
-    expect(result!).toBeCloseTo(0.2); // 0.6 - 0.4
+    expect(computeProbabilityChange(id, snapshots, 24)).toBeNull();
   });
 
   it('ignores snapshots from other markets', () => {

@@ -59,8 +59,8 @@ let marketQuery = supabase
   .from('markets')
   .select(
     'id,platform,platform_id,event_id,series_id,title,description,category,url,' +
-    'yes_price,no_price,volume_24h,open_interest,liquidity,spread,status,' +
-    'created_at,closes_at,resolved,resolution,resolved_at,last_ingested_at',
+      'yes_price,no_price,volume_24h,open_interest,liquidity,spread,status,' +
+      'created_at,closes_at,settles_at,resolved,resolution,resolved_at,last_ingested_at'
   )
   .eq('is_active', true);
 
@@ -102,7 +102,9 @@ const since = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
 
 const { data: snapshotRows, error: snapshotError } = await supabase
   .from('market_snapshots')
-  .select('market_id,snapshot_time,yes_price,no_price,volume_24h,open_interest,liquidity,spread,source,fetch_latency_ms,created_at')
+  .select(
+    'market_id,snapshot_time,yes_price,no_price,volume_24h,open_interest,liquidity,spread,source,fetch_latency_ms,created_at'
+  )
   .in('market_id', marketIds)
   .gte('snapshot_time', since)
   .order('snapshot_time', { ascending: true });
@@ -115,32 +117,20 @@ const snapshots = (snapshotRows ?? []) as MarketSnapshot[];
 console.error(`Fetched ${snapshots.length} snapshot(s) for those markets`);
 
 // ---------------------------------------------------------------------------
-// Fetch historical resolution count by category (used for trust context)
+// Fetch resolved market IDs for the batch (scoped per-cluster below)
 // ---------------------------------------------------------------------------
 
-const categories = [...new Set(markets.map((m) => m.category))];
-const resolutionCounts: Record<string, number> = {};
-
-for (const category of categories) {
-  const { count, error } = await supabase
-    .from('market_resolutions')
-    .select('market_id', { count: 'exact', head: true })
-    .eq('market_id', supabase.from('markets').select('id').eq('category', category) as unknown as string);
-
-  // Simplified: count all resolutions in the table and attribute per category via a join
-  // For v1 we just count all resolutions as a rough trust signal
-  void count;
-  void error;
-  resolutionCounts[category] = 0;
-}
-
-// Simpler: just get total resolution count across all markets we loaded
-const { count: totalResolutions } = await supabase
+const { data: resolvedRows, error: resolvedError } = await supabase
   .from('market_resolutions')
-  .select('market_id', { count: 'exact', head: true })
+  .select('market_id')
   .in('market_id', marketIds);
 
-const resolvedCount = totalResolutions ?? 0;
+if (resolvedError) {
+  throw new Error(`Failed to fetch resolutions: ${resolvedError.message}`);
+}
+
+const resolvedMarketIds = new Set((resolvedRows ?? []).map((r) => (r as { market_id: string }).market_id));
+console.error(`${resolvedMarketIds.size} resolved market(s) in batch`);
 
 // ---------------------------------------------------------------------------
 // Build event objects
@@ -151,7 +141,10 @@ console.error(`Formed ${clusters.length} cluster(s)`);
 
 // Sort clusters by primary market liquidity descending, take top N
 const eventObjects = clusters
-  .map((cluster) => buildEventIntelligence(cluster, snapshots, resolvedCount))
+  .map((cluster) => {
+    const clusterResolutionCount = cluster.markets.filter((m) => resolvedMarketIds.has(m.id)).length;
+    return buildEventIntelligence(cluster, snapshots, clusterResolutionCount);
+  })
   .sort((a, b) => {
     const la = a.trust_context.liquidity ?? -1;
     const lb = b.trust_context.liquidity ?? -1;

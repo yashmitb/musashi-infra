@@ -139,9 +139,7 @@ describe('clusterMarkets', () => {
     const clusters = clusterMarkets(markets);
     const cluster = clusters[0];
 
-    expect(cluster?.markets.map((m) => m.id).sort()).toEqual(
-      markets.map((m) => m.id).sort(),
-    );
+    expect(cluster?.markets.map((m) => m.id).sort()).toEqual(markets.map((m) => m.id).sort());
   });
 });
 
@@ -189,33 +187,56 @@ describe('selectPrimaryMarket', () => {
   });
 
   it('falls back to earliest closes_at when all financial metrics are tied', () => {
-    const sooner = buildMarket({ liquidity: null, open_interest: null, volume_24h: 0, closes_at: '2026-06-01T00:00:00Z' });
-    const later = buildMarket({ liquidity: null, open_interest: null, volume_24h: 0, closes_at: '2026-12-01T00:00:00Z' });
+    const sooner = buildMarket({
+      liquidity: null,
+      open_interest: null,
+      volume_24h: 0,
+      closes_at: '2026-06-01T00:00:00Z',
+    });
+    const later = buildMarket({
+      liquidity: null,
+      open_interest: null,
+      volume_24h: 0,
+      closes_at: '2026-12-01T00:00:00Z',
+    });
 
     expect(selectPrimaryMarket([later, sooner])).toBe(sooner);
   });
 
   it('ranks null closes_at after real dates', () => {
-    const withClose = buildMarket({ liquidity: null, open_interest: null, volume_24h: 0, closes_at: '2026-06-01T00:00:00Z' });
+    const withClose = buildMarket({
+      liquidity: null,
+      open_interest: null,
+      volume_24h: 0,
+      closes_at: '2026-06-01T00:00:00Z',
+    });
     const nullClose = buildMarket({ liquidity: null, open_interest: null, volume_24h: 0, closes_at: null });
 
     expect(selectPrimaryMarket([nullClose, withClose])).toBe(withClose);
   });
 
   it('uses lexicographic id as final stable tiebreaker', () => {
-    const a = buildMarket({ id: 'musashi-kalshi-aaa', liquidity: null, open_interest: null, volume_24h: 0, closes_at: null });
-    const b = buildMarket({ id: 'musashi-kalshi-bbb', liquidity: null, open_interest: null, volume_24h: 0, closes_at: null });
+    const a = buildMarket({
+      id: 'musashi-kalshi-aaa',
+      liquidity: null,
+      open_interest: null,
+      volume_24h: 0,
+      closes_at: null,
+    });
+    const b = buildMarket({
+      id: 'musashi-kalshi-bbb',
+      liquidity: null,
+      open_interest: null,
+      volume_24h: 0,
+      closes_at: null,
+    });
 
     // 'aaa' < 'bbb' so a should win
     expect(selectPrimaryMarket([b, a])).toBe(a);
   });
 
   it('is deterministic — same input always returns the same market', () => {
-    const markets = [
-      buildMarket({ liquidity: 200 }),
-      buildMarket({ liquidity: 200 }),
-      buildMarket({ liquidity: 200 }),
-    ];
+    const markets = [buildMarket({ liquidity: 200 }), buildMarket({ liquidity: 200 }), buildMarket({ liquidity: 200 })];
 
     const first = selectPrimaryMarket(markets);
     const second = selectPrimaryMarket([...markets].reverse());

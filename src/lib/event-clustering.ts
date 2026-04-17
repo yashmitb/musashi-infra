@@ -82,14 +82,14 @@ export function selectPrimaryMarket(markets: MusashiMarket[]): MusashiMarket {
 
 function compareNullableDesc(a: number | null, b: number | null): number {
   if (a === null && b === null) return 0;
-  if (a === null) return 1;  // null ranks lower → goes after real values
+  if (a === null) return 1; // null ranks lower → goes after real values
   if (b === null) return -1;
   return b - a; // descending: larger value first
 }
 
 function compareNullableStringAsc(a: string | null, b: string | null): number {
   if (a === null && b === null) return 0;
-  if (a === null) return 1;  // null ranks lower → goes after real values
+  if (a === null) return 1; // null ranks lower → goes after real values
   if (b === null) return -1;
   return a.localeCompare(b); // ascending: earlier date first
 }

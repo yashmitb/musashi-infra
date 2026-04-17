@@ -23,6 +23,12 @@ const MEDIUM_VOLUME_THRESHOLD = 100;
 const CONFIRM_UPPER = 0.6; // yes_price >= this → "bullish" signal
 const CONFIRM_LOWER = 0.4; // yes_price <= this → "bearish" signal
 
+// Proximity guard for lookback snapshots.
+// The reference snapshot must be within this fraction of the window from the target time.
+// E.g. 0.5 means the 24h reference must land between 12h and 36h ago.
+// Without this, two snapshots seconds apart can fake a 7d change.
+const LOOKBACK_TOLERANCE_RATIO = 0.5;
+
 /**
  * Compute the change in yes_price for a market over the last `hoursBack` hours.
  *
@@ -32,7 +38,7 @@ const CONFIRM_LOWER = 0.4; // yes_price <= this → "bearish" signal
 export function computeProbabilityChange(
   marketId: string,
   snapshots: MarketSnapshot[],
-  hoursBack: number,
+  hoursBack: number
 ): number | null {
   const marketSnapshots = snapshots
     .filter((s) => s.market_id === marketId)
@@ -57,7 +63,8 @@ export function computeProbabilityChange(
     }
   }
 
-  if (best === undefined) return null;
+  const toleranceMs = hoursBack * LOOKBACK_TOLERANCE_RATIO * 60 * 60 * 1000;
+  if (best === undefined || bestDiff > toleranceMs) return null;
 
   return latest.yes_price - best.yes_price;
 }
@@ -73,7 +80,7 @@ export function computeProbabilityChange(
 export function computeConfidenceLabel(
   liquidity: number | null,
   volume24h: number | null,
-  _openInterest: number | null,
+  _openInterest: number | null
 ): ConfidenceLabel {
   const liq = liquidity ?? 0;
   const vol = volume24h ?? 0;
@@ -95,10 +102,7 @@ export function computeConfidenceLabel(
  *   contradicting: one is clearly bullish while the other is clearly bearish
  *   related      : everything else — used as a safe default to avoid over-classification
  */
-export function labelRelation(
-  primaryYesPrice: number,
-  relatedYesPrice: number,
-): RelationLabel {
+export function labelRelation(primaryYesPrice: number, relatedYesPrice: number): RelationLabel {
   const primaryBullish = primaryYesPrice >= CONFIRM_UPPER;
   const primaryBearish = primaryYesPrice <= CONFIRM_LOWER;
   const relatedBullish = relatedYesPrice >= CONFIRM_UPPER;
@@ -127,7 +131,7 @@ export function labelRelation(
 export function buildEventIntelligence(
   cluster: EventCluster,
   snapshots: MarketSnapshot[],
-  historicalResolutionCount: number,
+  historicalResolutionCount: number
 ): EventIntelligence {
   const primary = selectPrimaryMarket(cluster.markets);
 
@@ -136,23 +140,21 @@ export function buildEventIntelligence(
 
   const relatedMarkets: RelatedMarket[] = cluster.markets
     .filter((m) => m.id !== primary.id)
-    .map((m): RelatedMarket => ({
-      market_id: m.id,
-      title: m.title,
-      relation: labelRelation(primary.yes_price, m.yes_price),
-      current_probability: m.yes_price,
-    }));
+    .map(
+      (m): RelatedMarket => ({
+        market_id: m.id,
+        title: m.title,
+        relation: labelRelation(primary.yes_price, m.yes_price),
+        current_probability: m.yes_price,
+      })
+    );
 
   const trustContext: TrustContext = {
     liquidity: primary.liquidity,
     volume_24h: primary.volume_24h,
     open_interest: primary.open_interest,
     historical_resolution_count: historicalResolutionCount,
-    confidence_label: computeConfidenceLabel(
-      primary.liquidity,
-      primary.volume_24h,
-      primary.open_interest,
-    ),
+    confidence_label: computeConfidenceLabel(primary.liquidity, primary.volume_24h, primary.open_interest),
   };
 
   return {

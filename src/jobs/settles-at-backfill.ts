@@ -80,7 +80,18 @@ export async function runSettlesAtBackfill(options: RunSettlesAtBackfillOptions 
 
       try {
         const raw = await client.fetchMarket(candidate.platform_id);
-        const settlesAt = raw?.latest_expiration_time ?? raw?.close_time ?? null;
+
+        if (!raw) {
+          // Market is no longer available on Kalshi. Fall back to closes_at so the
+          // market exits the candidate queue instead of being retried on every run.
+          if (candidate.closes_at !== null) {
+            await updateMarketSettlesAt(candidate.id, candidate.closes_at, startedAtIso);
+            return { updated: true, error: null };
+          }
+          return { updated: false, error: null };
+        }
+
+        const settlesAt = raw.latest_expiration_time ?? raw.close_time ?? null;
 
         if (settlesAt === null) {
           return { updated: false, error: null };

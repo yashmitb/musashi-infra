@@ -71,6 +71,17 @@ describe('runSettlesAtBackfill', () => {
     expect(mockUpdateMarketSettlesAt).toHaveBeenCalledWith('market-1', '2026-01-03T00:00:00Z', expect.any(String));
   });
 
+  it('falls back to closes_at when Kalshi returns null (market 404)', async () => {
+    mockListCandidates.mockResolvedValue([makeCandidate()]);
+    mockFetchMarket.mockResolvedValue(null);
+
+    const result = await runSettlesAtBackfill();
+
+    expect(result.status).toBe('success');
+    expect(result.kalshi_markets_new).toBe(1);
+    expect(mockUpdateMarketSettlesAt).toHaveBeenCalledWith('market-1', '2026-01-01T00:00:00Z', expect.any(String));
+  });
+
   it('records a partial run when one market fetch fails', async () => {
     mockListCandidates.mockResolvedValue([makeCandidate('market-1', 'A'), makeCandidate('market-2', 'B')]);
     mockFetchMarket.mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce({

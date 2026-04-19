@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { KalshiClient } from '../api/kalshi-client.js';
 import { failOpenRuns, startRun, completeRun } from '../db/ingestion-log.js';
-import { listSettlesAtBackfillCandidates, updateMarketSettlesAt } from '../db/markets.js';
+import { listSettlesAtBackfillCandidates, markMarketSourceMissing, updateMarketSettlesAt } from '../db/markets.js';
 import { getEnv } from '../lib/env.js';
 import { mapWithConcurrency } from '../lib/collections.js';
 import type { IngestionRunRecord } from '../types/storage.js';
@@ -80,6 +80,11 @@ export async function runSettlesAtBackfill(options: RunSettlesAtBackfillOptions 
 
       try {
         const raw = await client.fetchMarket(candidate.platform_id);
+        if (!raw) {
+          await markMarketSourceMissing(candidate.id, startedAtIso, candidate.closes_at);
+          return { updated: false, error: null };
+        }
+
         const settlesAt = raw?.latest_expiration_time ?? raw?.close_time ?? null;
 
         if (settlesAt === null) {

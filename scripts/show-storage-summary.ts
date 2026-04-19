@@ -146,6 +146,7 @@ async function loadMaintenanceSummary(): Promise<{
   compact_candidates_older_than_24h: number;
   compacted_rows: number;
   resolved_active_rows: number;
+  source_missing_rows: number;
 } | null> {
   if (!env.SUPABASE_DB_HOST || !env.SUPABASE_DB_NAME || !env.SUPABASE_DB_USER || !env.SUPABASE_DB_PASSWORD) {
     return null;
@@ -162,7 +163,7 @@ async function loadMaintenanceSummary(): Promise<{
   });
 
   try {
-    const [pruneRows, compactRows, compactedRows, resolvedRows] = await Promise.all([
+    const [pruneRows, compactRows, compactedRows, resolvedRows, sourceMissingRows] = await Promise.all([
       sql<{ prune_candidates: string }[]>`select count(*)::bigint as prune_candidates
                     from markets m
                    where m.platform = 'kalshi'
@@ -192,6 +193,10 @@ async function loadMaintenanceSummary(): Promise<{
                      and status = 'resolved'
                      and resolved = true
                      and is_active = true`,
+      sql<{ source_missing_rows: string }[]>`select count(*)::bigint as source_missing_rows
+                    from markets
+                   where platform = 'kalshi'
+                     and source_missing_at is not null`,
     ]);
 
     return {
@@ -204,6 +209,9 @@ async function loadMaintenanceSummary(): Promise<{
       compacted_rows: Number((compactedRows as unknown as Array<{ compacted_rows: string }>)[0]?.compacted_rows ?? 0),
       resolved_active_rows: Number(
         (resolvedRows as unknown as Array<{ resolved_active_rows: string }>)[0]?.resolved_active_rows ?? 0
+      ),
+      source_missing_rows: Number(
+        (sourceMissingRows as unknown as Array<{ source_missing_rows: string }>)[0]?.source_missing_rows ?? 0
       ),
     };
   } finally {

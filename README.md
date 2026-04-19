@@ -74,6 +74,11 @@ Set these under repository `Settings` -> `Secrets and variables` -> `Actions` ->
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
+- `SUPABASE_DB_HOST`
+- `SUPABASE_DB_PORT`
+- `SUPABASE_DB_NAME`
+- `SUPABASE_DB_USER`
+- `SUPABASE_DB_PASSWORD`
 - optional: `KALSHI_BASE_URL`
 
 GitHub Actions now runs an explicit env preflight before each scheduled job, so missing secrets fail with a short setup error instead of a runtime stack trace.
@@ -139,3 +144,9 @@ Use `npm run job:archive-inactive-markets` to move low-value inactive Kalshi mar
 It also runs in dry-run mode by default. Set `MARKET_ARCHIVE_EXECUTE=true` only when you intentionally want to archive and remove those rows from the hot table.
 
 Use `npm run job:compact-inactive-markets` to archive and then compact inactive Kalshi market rows once they are older than the configured age window (24 hours by default). This keeps IDs stable for snapshots and resolutions while shrinking hot-row payloads. It also runs in dry-run mode by default. Set `MARKET_COMPACT_EXECUTE=true` only when you intentionally want to compact old inactive rows.
+
+The scheduled `market-maintenance.yml` workflow runs every 6 hours and:
+- snapshots current storage status
+- archives low-value inactive rows older than 24 hours
+- compacts older inactive rows in the hot `markets` table
+- snapshots storage status again after maintenance

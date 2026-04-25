@@ -134,6 +134,21 @@ describe('computeProbabilityChange', () => {
     expect(computeProbabilityChange(id, snapshots, 24)).toBeNull();
   });
 
+  it('picks the snapshot closest to the target look-back time when both are within tolerance', () => {
+    const id = 'musashi-kalshi-m99';
+    // Latest: April 14 12:00. Target (24h back): April 13 12:00. Tolerance: ±12h.
+    // April 13 06:00 is 6h from target; April 13 00:00 is 12h from target (boundary).
+    // Should pick April 13 06:00 as it is closer.
+    const snapshots = [
+      buildSnapshot(id, '2026-04-13T00:00:00Z', 0.3), // 12h from target — at boundary
+      buildSnapshot(id, '2026-04-13T06:00:00Z', 0.4), // 6h from target — closer
+      buildSnapshot(id, '2026-04-14T12:00:00Z', 0.6), // current (latest)
+    ];
+    const result = computeProbabilityChange(id, snapshots, 24);
+    expect(result).not.toBeNull();
+    expect(result!).toBeCloseTo(0.2); // 0.6 - 0.4
+  });
+
   it('ignores snapshots from other markets', () => {
     const id = 'musashi-kalshi-m99';
     const snapshots = [
